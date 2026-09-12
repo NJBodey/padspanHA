@@ -993,6 +993,19 @@
   letter-spacing:.09em;color:rgba(226,240,232,.38)}
 .lv-val{font-size:11.5px;color:#cbd5e1;font-variant-numeric:tabular-nums;min-width:34px}
 
+/* A GROUP header, not a value label (Garry, 2026-09-11: "the large number of
+   controls is very poorly structured... group by what they do") — forces a
+   line break (flex-basis:100%) so the toolbar's flex-wrap can never split
+   one logical group across two lines, and a hairline above marks a new
+   section starting. Bigger and brighter than .lv-lbl on purpose: that class
+   already means "this is the name of the ONE control beside me" (Theme,
+   Floor, Room %); this means "everything until the next one of these is
+   part of the same topic." */
+.lv-grouplbl{flex-basis:100%;font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.12em;color:rgba(226,240,232,.5);margin-top:6px;padding-top:6px;
+  border-top:1px solid rgba(120,190,155,.1)}
+.lv-grouplbl:first-child{margin-top:0;padding-top:0;border-top:none}
+
 /* A related set of sliders (Automorph's own three, the view-layout three)
    reads as one thing at a glance — a faint shade + hairline, one step
    lighter than the toolbar's own background, never louder than that. */

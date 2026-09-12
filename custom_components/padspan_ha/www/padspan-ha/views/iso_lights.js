@@ -2450,40 +2450,6 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
   const pts = cs=>cs.map(pt).join(" ");
 
   const levelColor=(z)=>LAYER_PAL[levels.indexOf(z)%LAYER_PAL.length];
-  // Where the building actually ends on screen, not the fixed worst-case
-  // canvas BASE_H was allocated for (Garry, 2026-09-11: "why is there such a
-  // big gap between the bottom of the map and the index, color bar"). S
-  // (fabricFrame, above) is the SMALLER of a width-fit and a height-fit
-  // scale — a house whose footprint is wide relative to its isometric depth
-  // gets width-capped, so the drawing never uses the vertical room BASE_H
-  // reserves for the tallest case, leaving a dead strip below the last room.
-  // 70px of pad covers a room's own stroke, its floor badge and marker
-  // halos, which sit slightly past the room polygon's own bottom edge.
-  let contentMaxY = -Infinity;
-  for(const r of rooms) for(const p of r.pts){
-    const py = iso(p[0], p[1], r.z)[1];
-    if(py > contentMaxY) contentMaxY = py;
-  }
-  const LEGEND_Y0 = isFinite(contentMaxY) ? Math.min(BASE_H, contentMaxY + 70) : BASE_H;
-  // ONE fixed row for the whole bottom strip — floor index AND the motion
-  // colour index share it (Garry, 2026-09-11: the old formula gave the
-  // floor index its OWN row per floor, so a 4-storey house drew a legend
-  // taller than the map itself; then "put that on the same line as the
-  // motion color index bar, be more efficient with the rapidly evaporating
-  // space" — so the two rows became one).
-  const LEGEND_H=32;
-  // Top of the stack in DRAWN storeys, not level numbers — otherwise a gap in
-  // the numbering reserved empty canvas above the building.
-  const maxIsoZ = levels.length ? rankOf(levels[levels.length-1]) : 0;
-  const viewY   = Math.min(0, CY - maxIsoZ*FG - 50);   // 50 px top padding
-  const HTOTAL  = LEGEND_Y0 + LEGEND_H - viewY;
-
-  // width:100% with NO height cap. `max-height:${HTOTAL}px` pinned the drawing
-  // to its natural size, so on any panel wider than the 760-unit viewBox the
-  // browser letterboxed it — the map sat at 1:1 in the middle with dead space
-  // down both sides, and the zoom control could only slide it around inside
-  // that box instead of making it bigger. The aspect ratio still comes from
-  // the viewBox; the host sizes it.
   // Per-floor metre bbox, needed BEFORE the gradient prepass: the scene field
   // spans it (each storey gets the whole gradient) and the isolux grid walks
   // it. The slab sizing below reads the same numbers.
@@ -2498,6 +2464,98 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
     }
     if(isFinite(a)) floorBox.set(z, {x0:a, y0:b, x1:c, y1:d});
   }
+  // One slab footprint for the whole stack: the largest floor's, so no floor
+  // is cropped and every floor reads at the same scale. Computed here, ahead
+  // of where the slabs are actually drawn below, because the viewBox itself
+  // needs to know how far a slab's own corners reach — see the content-extent
+  // pass right after.
+  let slabHalfW=0, slabHalfH=0;
+  for(const box of floorBox.values()){
+    slabHalfW=Math.max(slabHalfW,(box.x1-box.x0)/2);
+    slabHalfH=Math.max(slabHalfH,(box.y1-box.y0)/2);
+  }
+  const slabPad=Math.max(0.4, Math.max(slabHalfW,slabHalfH)*0.08);
+  slabHalfW+=slabPad; slabHalfH+=slabPad;
+  const slabWZ=18/FG;
+
+  // Where the building actually ends on screen, not the fixed worst-case
+  // canvas BASE_H/W were allocated for (Garry, 2026-09-11: "why is there such
+  // a big gap between the bottom of the map and the index, color bar"; a
+  // later visual audit found the same shape of bug on X — a real slab
+  // side-face polygon drawn at x=-72 while the viewBox started at x=0). S
+  // (fabricFrame, above) is the SMALLER of a width-fit and a height-fit
+  // scale — a house whose footprint is wide relative to its isometric depth
+  // gets width-capped, so the drawing never uses the vertical room BASE_H
+  // reserves for the tallest case, leaving a dead strip below the last room.
+  // 70/50/30px of pad covers a room's own stroke, its floor badge and marker
+  // halos, which sit slightly past the room polygon's own edge.
+  //
+  // Y stays room-points-only, same as already shipped: the room's own
+  // stroke/badge/halo padding (70/50px below) already covers it in practice,
+  // and folding the slab's own bounding rectangle in here too only re-adds
+  // slack the earlier "big gap at the bottom" fix had just removed, for no
+  // observed benefit (no live Y clipping — see the X note below for why X is
+  // different).
+  let contentMaxY = -Infinity, contentMinY = Infinity;
+  for(const r of rooms) for(const p of r.pts){
+    const py = iso(p[0], p[1], r.z)[1];
+    if(py > contentMaxY) contentMaxY = py;
+    if(py < contentMinY) contentMinY = py;
+  }
+  // X is different: a room's own vertices are not the whole story here. Each
+  // floor's SLAB is an axis-aligned bounding rectangle around that floor's
+  // rooms, and an axis-aligned box's CORNERS — top face and the bottom face
+  // one slabWZ storey lower, same as the slab drawing below — can land
+  // further out, isometrically, than any vertex of the (possibly irregular)
+  // rooms it bounds. That rectangle, not the rooms themselves, is what
+  // actually clipped past the canvas edge live.
+  let contentMinX = Infinity, contentMaxX = -Infinity;
+  const growX=(x)=>{ if(x<contentMinX) contentMinX=x; if(x>contentMaxX) contentMaxX=x; };
+  for(const r of rooms) for(const p of r.pts) growX(iso(p[0], p[1], r.z)[0]);
+  for(const z of levels){
+    const box=floorBox.get(z);
+    if(!box) continue;
+    const ccx=(box.x0+box.x1)/2, ccy=(box.y0+box.y1)/2;
+    const halfW=(box.x1-box.x0)/2+slabPad, halfH=(box.y1-box.y0)/2+slabPad;
+    const x0=ccx-halfW, x1=ccx+halfW, y0_=ccy-halfH, y1_=ccy+halfH;
+    const zb=rankOf(z)-slabWZ;
+    for(const pt of [iso(x0,y0_,z), iso(x1,y0_,z), iso(x1,y1_,z), iso(x0,y1_,z),
+                      iso(x0,y0_,zb), iso(x1,y0_,zb), iso(x1,y1_,zb), iso(x0,y1_,zb)]) growX(pt[0]);
+  }
+  const LEGEND_Y0 = isFinite(contentMaxY) ? Math.min(BASE_H, contentMaxY + 70) : BASE_H;
+  // ONE fixed row for the whole bottom strip — floor index AND the motion
+  // colour index share it (Garry, 2026-09-11: the old formula gave the
+  // floor index its OWN row per floor, so a 4-storey house drew a legend
+  // taller than the map itself; then "put that on the same line as the
+  // motion color index bar, be more efficient with the rapidly evaporating
+  // space" — so the two rows became one).
+  const LEGEND_H=32;
+  // Top of the stack in DRAWN storeys, not level numbers — otherwise a gap in
+  // the numbering reserved empty canvas above the building.
+  const maxIsoZ = levels.length ? rankOf(levels[levels.length-1]) : 0;
+  // The stack-top formula (CY - maxIsoZ*FG) is a theoretical reference point,
+  // not where the topmost room's own geometry actually ends — a house whose
+  // floor count/spacing puts that reference near CY leaves the formula's 50px
+  // pad thin-to-nothing (Garry, 2026-09-11: "the top of the map is cut off"),
+  // while the room itself still reaches just as far up as ever. Same fix as
+  // LEGEND_Y0 above: measure the real top edge and pad from THAT.
+  const viewY = isFinite(contentMinY) ? Math.min(0, contentMinY - 50)
+                                       : Math.min(0, CY - maxIsoZ*FG - 50);
+  const HTOTAL  = LEGEND_Y0 + LEGEND_H - viewY;
+  // Same idea, sideways: the fixed 0..W bound never reserved any slack at
+  // all, so a floor whose slab corners land left of x=0 or right of x=W
+  // (a nonzero L/R spacing shifts every floor's slab sideways by its own
+  // storey's worth of that offset) drew straight past the canvas edge.
+  const viewX0 = isFinite(contentMinX) ? Math.min(0, contentMinX - 30) : 0;
+  const viewX1 = isFinite(contentMaxX) ? Math.max(W, contentMaxX + 30) : W;
+  const WTOTAL = viewX1 - viewX0;
+
+  // width:100% with NO height cap. `max-height:${HTOTAL}px` pinned the drawing
+  // to its natural size, so on any panel wider than the 760-unit viewBox the
+  // browser letterboxed it — the map sat at 1:1 in the middle with dead space
+  // down both sides, and the zoom control could only slide it around inside
+  // that box instead of making it bigger. The aspect ratio still comes from
+  // the viewBox; the host sizes it.
   // Room centroids by name — where an unplaced light clusters, so a scene
   // field can give cluster lights the colour of the middle of their room.
   const roomCentre=new Map();
@@ -2512,9 +2570,9 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
     return box ? QCOL(sampleSceneField(FIELD, x, y, box)) : null;
   };
 
-  let s=`<svg viewBox="0 ${viewY} ${W} ${HTOTAL}" xmlns="http://www.w3.org/2000/svg" width="100%" `+
+  let s=`<svg viewBox="${viewX0} ${viewY} ${WTOTAL} ${HTOTAL}" xmlns="http://www.w3.org/2000/svg" width="100%" `+
     `data-natural-h="${HTOTAL}" style="display:block;font-family:system-ui,sans-serif">`;
-  s+=`<rect x="0" y="${viewY}" width="${W}" height="${HTOTAL}" fill="${AMB?mixHex("#071008","#22301f",AMB):"#071008"}"/>`;
+  s+=`<rect x="${viewX0}" y="${viewY}" width="${WTOTAL}" height="${HTOTAL}" fill="${AMB?mixHex("#071008","#22301f",AMB):"#071008"}"/>`;
 
   // ── Showcase: the colour a fixture actually throws ────────────────────────
   // A light that reports rgb_color is drawn and glows in ITS OWN colour, so a
@@ -2947,7 +3005,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
     }
   });
   s+=`</defs>`;
-  if(SHOW) s+=`<rect x="0" y="${viewY}" width="${W}" height="${HTOTAL}" fill="url(#psvig)" pointer-events="none"/>`;
+  if(SHOW) s+=`<rect x="${viewX0}" y="${viewY}" width="${WTOTAL}" height="${HTOTAL}" fill="url(#psvig)" pointer-events="none"/>`;
 
   // Nothing in the fabric yet. The old copy blamed a missing PHOTO ("No floor
   // plans uploaded yet"), which sent people to upload an image that this view
@@ -2958,22 +3016,11 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
     s+=`</svg>`; return s;
   }
 
-  const slabWZ=18/FG;
   const placed={};
   for(const l of lights) placed[l.eid]=l.lp;
 
-  // One slab footprint for the whole stack: the largest floor's, so no floor
-  // is cropped and every floor reads at the same scale.
-  let slabHalfW=0, slabHalfH=0;
-  for(const box of floorBox.values()){
-    slabHalfW=Math.max(slabHalfW,(box.x1-box.x0)/2);
-    slabHalfH=Math.max(slabHalfH,(box.y1-box.y0)/2);
-  }
-  // One padding for the whole stack, so slabs stay visually consistent even
-  // though each is sized to its own floor.
-  const slabPad=Math.max(0.4, Math.max(slabHalfW,slabHalfH)*0.08);
-  slabHalfW+=slabPad; slabHalfH+=slabPad;
-
+  // slabWZ/slabHalfW/slabHalfH/slabPad are computed earlier now — the
+  // viewBox itself needs them, see the content-extent pass above.
   for(const z of levels){
     const isFocused=focusZ===null||(Array.isArray(focusZ)?focusZ.includes(z):focusZ===z);
     const go=isFocused?1.0:0.1;
@@ -3272,14 +3319,28 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
 
       let body;
       if(suppressGlyph){
-        // The aura is this fixture's visual now; what remains here is the
-        // SAME silhouette at the SAME transform, painted transparent —
-        // fill="transparent", never "none": SVG's default pointer-events
-        // (visiblePainted) hit-tests a transparent fill but not a none
-        // fill, so this is exactly what keeps the fixture clickable and
-        // draggable while invisible (the same deliberate choice
-        // perimeter's own hit rect makes below).
-        body=layer(`data-hit="1" fill="transparent" stroke="none" pointer-events="all"`);
+        // The aura is this fixture's visual now; what remains here is a
+        // click/drag target, painted transparent — fill="transparent",
+        // never "none": SVG's default pointer-events (visiblePainted)
+        // hit-tests a transparent fill but not a none fill, so this is
+        // exactly what keeps the fixture clickable and draggable while
+        // invisible (the same deliberate choice perimeter's own hit rect
+        // makes below).
+        //
+        // Bounded to a plain marker's own footprint (hx,hy,HEX_R) — NOT
+        // layer()'s real size/rotation — on purpose. This used to be
+        // layer(...), the fixture's own real (possibly large, rotated)
+        // silhouette, same as its visible glyph would have used. That is
+        // correct for a VISIBLE glyph (the click target should match what
+        // is drawn), but here nothing is drawn at all: a real-size fixture
+        // (a valance, a stretched strip) left an invisible hit-shape far
+        // bigger than any marker, silently overlapping whichever OTHER
+        // fixtures' markers happened to sit inside that footprint and
+        // stealing their clicks — confirmed live (Garry, 2026-09-11: "I am
+        // clearly clicking inside the boundary of the right light, and
+        // outside the bounds of the light that actually responds").
+        body=`<circle data-hit="1" fill="transparent" stroke="none" pointer-events="all" `+
+          `cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${HEX_R}"/>`;
       } else if(SHOW){
         // Bloom hugging the silhouette (a stroke, so it follows any shape),
         // then the body, then the fixture's own detail, then a single
@@ -5112,6 +5173,10 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
     // boundary line on the floor, always, the same way markers already paint
     // over every room.
     const labelJobs=[];
+    // Every room name already placed on this floor (centre + footprint), so
+    // the next one can step out of ITS way too — see the collision check
+    // in the room loop below.
+    const placedLabels=[];
 
     // Rooms, straight from the metre fabric.
     for(const r of hereRooms){
@@ -5165,11 +5230,28 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       // window left its M08 marker checked as "not near" while visibly
       // drawn through the name.
       {
+        // A temperature readout is a fixture whose FOOTPRINT is its digits
+        // (TEMP_DIGIT_PX bold monospace, centred on the marker — see
+        // markerSvg), not a marker-sized dot, so its window is the digits'
+        // own half-size on top of the plain ±9px band. Live on Garry's
+        // house (2026-09-12 audit): a "20" drawn straight through PANTRY,
+        // sitting just outside the band a plain marker would have tripped.
         const near=(ly)=>hereLights.some(l=>{
           const [mx2,my2]=iso(l.x,l.y,z);
-          return Math.abs(mx2-lix)<rw/2 && Math.abs(my2-ly)<9;
+          const lb=lightsByEid[l.eid];
+          const fresh=(lb&&lb.isTemp&&lb.last_changed) ? NOW_MS-Date.parse(lb.last_changed) : NaN;
+          const readout=!!(lb&&lb.isTemp&&Number.isFinite(lb.temperature)&&fresh>=0&&fresh<TEMP_FRESH_MS);
+          const halfW=readout ? String(lb.temperature).length*TEMP_DIGIT_PX*0.3 : 0;
+          const halfH=readout ? TEMP_DIGIT_PX/2 : 0;
+          return Math.abs(mx2-lix)<rw/2+halfW && Math.abs(my2-ly)<9+halfH;
         });
-        for(let tries=0; tries<3 && near(liy); tries++) liy-=13;
+        // ...and out of the way of a name already placed on this floor: two
+        // small rooms side by side ("BEDROOM BATH" over "POWDERROOM", same
+        // audit) were drawn through each other, each checked only against
+        // fixtures, never against the other's label.
+        const overLabel=(ly)=>placedLabels.some(p=>Math.abs(p.x-lix)<(p.w+rw)/2 && Math.abs(p.y-ly)<(p.h+rh)/2);
+        for(let tries=0; tries<3 && (near(liy)||overLabel(liy)); tries++) liy-=13;
+        placedLabels.push({x:lix, y:liy, w:rw, h:rh});
       }
       if(SHOW){
         // Same polygon, given depth: a soft dark edge seats the room on the

@@ -19,13 +19,13 @@ const { makeStackXform, mapXform, imageAr, fabricWorldRooms, mapFracToMetres,
 // THE fabric frame — the Lights tab inverts drags through the exact function
 // the renderer draws with, so the two cannot disagree.
 const { fabricFrame, markerScale, markerRadiusPx, cmFromHandlePx, MAX_FIXTURE_CM,
-        floorIdAtLevel, sceneColours, defaultPerimeterMarginM } =
+        floorIdAtLevel, sceneColours, defaultPerimeterMarginM, shapeSvg } =
   await import(`./iso_lights.js${new URL(import.meta.url).search}`);
 // THE shared Lights view (data pipeline, map card, index table) — used
 // verbatim by the Lights sidebar panel, so the two tools always show the
 // identical map; this tab layers the build tools on top of it.
 const { ensureLightsRegistry, gatherLights, buildLightsMapCard, buildLightsTable, lightIsTouched,
-        sunAmbient, lastBrightness, spreadInRoom, createUndoStack, setOptimistic, clearOptimistic,
+        sunAmbient, lastBrightness, spreadInRoom, createUndoStack, setOptimistic, clearOptimistic, effectiveState,
         wireUseSurface, openControlCard, openRoomSheet, openFloorSheet, openActivityCalendar, setManyStates } =
   await import(`./lights_map.js${new URL(import.meta.url).search}`);
 // Fixture-shape vocabulary + derivation (the tab owns the manual override UI).
@@ -7432,8 +7432,24 @@ function _wireLightsBuild(ctx, isoDiv, o) {
     }
   }
 
-  // Room name → select every light in the room (the multi-selection).
+  // Room name → select every light in the room (the multi-selection). A
+  // plain click only selects; jumping the table down to the row is gated on
+  // a long press (Garry, 2026-09-11: selecting on the map "just pops to the
+  // part of the list with the device... kills most of the functionality of
+  // the lights map edit" — every select-on-map used to scroll the table
+  // unconditionally, which fights exactly the repeated map-only selection a
+  // multi-light edit needs). 500ms matches the row's own long-press-for-
+  // controls elsewhere in this table.
   for (const rg of isoDiv.querySelectorAll("g.lroom[data-room]")) {
+    let lpTimer = null, longPressed = false;
+    rg.addEventListener("pointerdown", (ev) => {
+      longPressed = false;
+      lpTimer = setTimeout(() => { longPressed = true; }, 500);
+    });
+    const cancelTimer = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+    rg.addEventListener("pointerup", cancelTimer);
+    rg.addEventListener("pointerleave", cancelTimer);
+    rg.addEventListener("pointercancel", cancelTimer);
     rg.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const room = rg.getAttribute("data-room");
@@ -7442,7 +7458,7 @@ function _wireLightsBuild(ctx, isoDiv, o) {
       selSet.clear();
       for (const e of eids) selSet.add(e);
       o.mapState._selLight = { eid: eids[0], mapId: null };
-      o.mapState._focusRow = eids[0];
+      if (longPressed) o.mapState._focusRow = eids[0];
       ctx.actions.renderRooms();
     });
   }
@@ -7593,6 +7609,16 @@ function _wireLightsBuild(ctx, isoDiv, o) {
         } catch (_) { originCx = start.x; originCy = start.y; }
       }
       let moved = false;
+      // The table-jump is gated on a long press, not a plain select (Garry,
+      // 2026-09-11: selecting on the map "just pops to the part of the list
+      // with the device... kills most of the functionality of the lights
+      // map edit" — every click used to scroll the table out from under
+      // whatever you were doing on the map). Cancelled the instant this
+      // turns into a drag, same threshold (500ms) the row's own long-press
+      // uses elsewhere in this table.
+      let longPressed = false;
+      let longPressCancelled = false;
+      const lpTimer = setTimeout(() => { longPressed = true; }, 500);
       try { g.setPointerCapture(ev.pointerId); } catch (_) {}
       // Group drag: when the grabbed light is part of the multi-selection,
       // every selected PLACED light moves with it by the same delta — each
@@ -7607,6 +7633,19 @@ function _wireLightsBuild(ctx, isoDiv, o) {
       const mm = (e) => {
         const v = toVB(e);
         const dx = v.x - start.x, dy = v.y - start.y;
+        // The long press is cancelled by ANY real movement (3px — plain click
+        // jitter, not the 8px drag-arm threshold below), not just a completed
+        // drag. Found live (Garry, 2026-09-11): a slow, deliberate drag that
+        // hadn't yet crossed 8px when 500ms elapsed still had longPressed
+        // flip true underneath it — so releasing a hair under the drag
+        // threshold, which happens naturally on a careful/slow drag, jumped
+        // to the table instead of just doing nothing. Cancelling on the
+        // first sign of movement, whether or not it ever becomes a drag,
+        // means only a genuinely STILL press can ever set longPressed.
+        if (!longPressCancelled && Math.abs(dx) + Math.abs(dy) > 3) {
+          longPressCancelled = true;
+          clearTimeout(lpTimer);
+        }
         // Arm the drag (and the render freeze) only once this is genuinely a
         // drag. 8px, not 3: every hex is draggable now, so a twitch while
         // select-clicking an auto-clustered light would pin it. 3px is inside
@@ -7618,12 +7657,27 @@ function _wireLightsBuild(ctx, isoDiv, o) {
         if (moved) {
           g.setAttribute("transform", `translate(${dx},${dy})`);
           for (const m of group) m.g.setAttribute("transform", `translate(${dx},${dy})`);
+          // The Transform overlay (box/handles/stand-in — see
+          // _wireTransformHandles) is a SEPARATE layer, anchored on this
+          // light's position at the moment it was drawn, not re-read on
+          // every frame — so a plain move-drag (not one of its own resize/
+          // rotate handles) used to leave it standing still while the light
+          // slid out from under it, with nothing visible moving until the
+          // drop (Garry, 2026-09-11: "the object doesn't move until you let
+          // go of it, so there is not real visual indicator of where you
+          // moved it to"). Sliding the WHOLE overlay by the same delta
+          // keeps it glued to the light for the length of the drag.
+          if (o.mapState._lightsTransform && o.mapState._selLight?.eid === eid) {
+            const lxform = isoDiv.querySelector("g.lxform");
+            if (lxform) lxform.setAttribute("transform", `translate(${dx},${dy})`);
+          }
         }
       };
       const up = (e) => {
         g.removeEventListener("pointermove", mm);
         g.removeEventListener("pointerup", up);
         g.removeEventListener("pointercancel", up);
+        clearTimeout(lpTimer);
         try { g.releasePointerCapture(ev.pointerId); } catch (_) {}
         o.mapState._editDragging = false;
         if (!moved || e.type === "pointercancel") {
@@ -7639,7 +7693,7 @@ function _wireLightsBuild(ctx, isoDiv, o) {
             selSet.clear();
           }
           o.mapState._selLight = { eid, mapId: null };
-          o.mapState._focusRow = eid;
+          if (longPressed) o.mapState._focusRow = eid;
           ctx.actions.renderRooms();
           return;
         }
@@ -7661,8 +7715,11 @@ function _wireLightsBuild(ctx, isoDiv, o) {
           const [mx, my] = frame.isoInv(m.cx + (v.x - start.x), m.cy + (v.y - start.y), m.z);
           _draftAt(ctx, o, m.eid, mx, my, _floorIdForLight(ctx, m.eid, m.z, frame, o.lightsByEid), "manual");
         }
+        // A completed drag is map work in progress, not a "show me in the
+        // list" request — it never jumps the table (see the pointerdown
+        // comment above), even though the drag itself outlasted the
+        // long-press timer.
         o.mapState._selLight = { eid, mapId: null };
-        o.mapState._focusRow = eid;
         ctx.actions.renderRooms();
       };
       g.addEventListener("pointermove", mm);
@@ -7885,6 +7942,35 @@ function _wireTransformHandles(ctx, svg, g, eid, frame, o, toVB) {
   box.setAttribute("opacity", "0.55"); box.setAttribute("pointer-events", "none");
   layer.appendChild(box);
 
+  // A bright, always-visible stand-in for the fixture itself (Garry,
+  // 2026-09-11: transform tool has "no visual on the object when it is
+  // being transformed... should show the object moving/transforming as it
+  // is being done"). The dashed box above already rotates/resizes live,
+  // but the fixture's OWN glyph (`inner`, below) can be entirely invisible
+  // right now for reasons this tool has nothing to do with — Automorph
+  // replaces a lit fixture's glyph with a room-fitted aura elsewhere on the
+  // map, and a perimeter-shaped fixture's body is its own trace — so
+  // rotating/resizing `inner` was frequently animating something nobody
+  // could see. This is the tool's OWN copy of the fixture's silhouette,
+  // always painted, so the object itself visibly turns and stretches under
+  // your hand regardless of what the underlying marker is doing.
+  const glyphL = o.lightsByEid[eid];
+  const standIn = document.createElementNS(NS, "g");
+  standIn.setAttribute("pointer-events", "none");
+  standIn.innerHTML = shapeSvg(glyphL ? glyphL.shape : "circle", 0, 0, markerRadiusPx(frame.scale),
+    'fill="#f0abfc" fill-opacity="0.55" stroke="#e879f9" stroke-width="1.5"');
+  // Start at the fixture's CURRENT rotation/size, not identity — otherwise
+  // the stand-in snaps from plain-and-unrotated to correct on the first
+  // pointermove instead of matching what's already there.
+  {
+    const { sx: sx0, sy: sy0 } = markerScale(Number(entry.width_cm) || 0, Number(entry.height_cm) || 0,
+                                              frame.scale, markerRadiusPx(frame.scale));
+    standIn.setAttribute("transform",
+      `translate(${cx.toFixed(1)},${cy.toFixed(1)}) rotate(${Number(entry.rotation) || 0}) `
+      + `scale(${sx0.toFixed(3)},${sy0.toFixed(3)})`);
+  }
+  layer.appendChild(standIn);
+
   // kind: "w" widens, "h" lengthens, "wh" does both, "rot" turns.
   const mkHandle = (hx, hy, kind, cursor, title) => {
     const h = kind === "rot"
@@ -7933,9 +8019,29 @@ function _wireTransformHandles(ctx, svg, g, eid, frame, o, toVB) {
         // what lands on pointer-up.
         const { sx, sy } = markerScale(next.width_cm, next.height_cm,
                                        frame.scale, markerRadiusPx(frame.scale));
-        inner.setAttribute("transform",
-          `translate(${cx.toFixed(1)},${cy.toFixed(1)}) rotate(${next.rotation}) `
-          + `scale(${sx.toFixed(3)},${sy.toFixed(3)})`);
+        const liveTransform = `translate(${cx.toFixed(1)},${cy.toFixed(1)}) rotate(${next.rotation}) `
+          + `scale(${sx.toFixed(3)},${sy.toFixed(3)})`;
+        inner.setAttribute("transform", liveTransform);
+        // The tool's own always-visible stand-in (see where `standIn` is
+        // built, above) turns and stretches in lockstep with `inner` — same
+        // transform, so it never disagrees with what actually lands.
+        standIn.setAttribute("transform", liveTransform);
+        // Also update the dashed box itself (Garry, 2026-09-11: "I can not
+        // see the object rotating on my screen... I have no idea where the
+        // rotation lands"). `inner` is that fixture's OWN glyph, and it can
+        // be entirely invisible right now for reasons that have nothing to
+        // do with this tool — Automorph replaces a lit fixture's glyph with
+        // a room-fitted aura elsewhere on the map, and a perimeter-shaped
+        // fixture's "body" is its own trace, not a point icon — so rotating
+        // `inner` was frequently rotating nothing anyone could see. The box
+        // is always drawn, always visible, and never suppressed, so it is
+        // the one part of this tool that can promise feedback regardless of
+        // the fixture underneath it.
+        const boxHalfW = Math.max(14, ((Number(next.width_cm) || 0) / 100) * frame.scale / 2);
+        const boxHalfH = Math.max(14, ((Number(next.height_cm) || 0) / 100) * frame.scale / 2);
+        box.setAttribute("x", cx - boxHalfW); box.setAttribute("y", cy - boxHalfH);
+        box.setAttribute("width", boxHalfW * 2); box.setAttribute("height", boxHalfH * 2);
+        box.setAttribute("transform", `rotate(${next.rotation} ${cx} ${cy})`);
       };
       const up = () => {
         h.removeEventListener("pointermove", mm);
@@ -8298,7 +8404,12 @@ function _lightsTab(ctx, maps, active) {
     const domain = String(eid).split(".")[0];
     if (domain === "binary_sensor") { ctx.toast("Sensors are read-only"); return; }
     if (domain === "sensor") { ctx.toast("Temperature sensors are read-only"); return; }
-    const on = ctx.hass.states[eid]?.state === "on";
+    // The EFFECTIVE state, not the raw HA one (Garry, 2026-09-11: a second
+    // tap inside the same optimistic window re-decided from state that
+    // hadn't caught up yet, so it silently repeated the first command
+    // instead of reversing it — see lights_panel.js's own _toggle for the
+    // full story; this preview path shares the same bug and the same fix).
+    const on = effectiveState(eid, ctx.hass.states[eid]?.state).state === "on";
     // Optimistic, like the sidebar: the marker flips now, HA reconciles.
     setOptimistic(eid, on ? "off" : "on");
     ctx.actions.renderRooms();
@@ -8678,6 +8789,10 @@ function _lightsTab(ctx, maps, active) {
     // column reads this instead of onPlaceRow/placements for l.isDoor rows.
     doorLinkedIds: new Set((ctx.state.model?.rf_barriers_m || [])
       .filter(b => b.linked_entity_id).map(b => b.linked_entity_id)),
+    // Which linked door/lock is currently steel, for the row's own Steel
+    // toggle below — keyed the same way doorLinkedIds is.
+    doorMaterialByEid: Object.fromEntries((ctx.state.model?.rf_barriers_m || [])
+      .filter(b => b.linked_entity_id).map(b => [b.linked_entity_id, b.material])),
     // Arms the on-map circle tool (see _wireLightsBuild's click handler,
     // _wireDoorCircle's drag handlers, and _commitDoorCircle) — builder
     // only, same gate as onPlaceRow. Garry, 2026-09-09: linking has to work
@@ -8713,6 +8828,24 @@ function _lightsTab(ctx, maps, active) {
         await ctx.actions.modelRefresh();
         ctx.toast(`Unlinked — "${l.friendly_name || l.entity_id}" can be placed again.`);
       } catch (e) { ctx.toast("Could not unlink: " + (e.message || e), true); }
+      ctx.actions.renderRooms();
+    } : null,
+    // "Just add the ability to make the door/window steel or not" (Garry,
+    // 2026-09-11) — the confirm() dialog in _commitDoorCircle only ever asks
+    // ONCE, at creation, and only when the parent wall wasn't already metal;
+    // there was no way to change it afterward. Same steel/12dB choice as
+    // that dialog, but a standing toggle: metal (steel) or custom (6dB),
+    // same fetch-raw-record-first pattern as Invert/Unlink above.
+    onToggleDoorSteel: paid && !preview ? async (l) => {
+      const bar = (ctx.state.model?.rf_barriers_m || []).find(b => b.linked_entity_id === l.entity_id);
+      if (!bar) { ctx.toast("That link no longer exists.", true); return; }
+      const toSteel = bar.material !== "metal";
+      try {
+        await ctx.actions.callWS({ type: "padspan_ha/fabric_rf_barrier_set",
+          barrier: { ...bar, material: toSteel ? "metal" : "custom", attenuation_dbm: toSteel ? 12 : 6 } });
+        await ctx.actions.modelRefresh();
+        ctx.toast(toSteel ? "Set to steel (12 dB)." : "No longer steel (6 dB).");
+      } catch (e) { ctx.toast("Could not update: " + (e.message || e), true); }
       ctx.actions.renderRooms();
     } : null,
     // Map → index: the row of the light just selected on the map scrolls
@@ -8889,6 +9022,14 @@ function _lightsTab(ctx, maps, active) {
       mapState._lightsAutomorphHardness = values.lights_automorph_hardness;
       mapState._lightsAutomorphStyle = values.lights_automorph_style;
       mapState._lightsAutomorphSubtlety = values.lights_automorph_subtlety;
+      // Layout & view (Garry, 2026-09-12: "include more elements into this
+      // feature") — the same three keys Save view writes. Optional: a look
+      // saved before these existed carries none, and must not move the
+      // camera. `view` is mapState._lightsView, which survives the re-render
+      // below, so the sliders come back showing the preset's numbers.
+      if (values.overview_iso_floor_gap !== undefined) view.floorGap = values.overview_iso_floor_gap;
+      if (values.overview_iso_horiz_gap !== undefined) view.horizGap = values.overview_iso_horiz_gap;
+      if (values.overview_iso_focus !== undefined) view.focusIdx = values.overview_iso_focus ?? 0;
       try { await ctx.actions.settingsSet(values); }
       catch (e) { ctx.toast("Could not apply the preset: " + String(e), true); }
       ctx.actions.renderRooms();
@@ -8914,6 +9055,12 @@ function _lightsTab(ctx, maps, active) {
         lights_automorph_hardness: Number(mapState._lightsAutomorphHardness === undefined ? ctx.state.settings?.lights_automorph_hardness : mapState._lightsAutomorphHardness) || 0,
         lights_automorph_style: (mapState._lightsAutomorphStyle === undefined ? ctx.state.settings?.lights_automorph_style : mapState._lightsAutomorphStyle) || "glow",
         lights_automorph_subtlety: Number(mapState._lightsAutomorphSubtlety === undefined ? ctx.state.settings?.lights_automorph_subtlety : mapState._lightsAutomorphSubtlety) || 0,
+        // Layout & view — read from `view` (the live slider state), the same
+        // source Save view reads, not ctx.state.settings, for the same
+        // stale-round-trip reason as the overrides above.
+        overview_iso_floor_gap: view.floorGap,
+        overview_iso_horiz_gap: view.horizGap,
+        overview_iso_focus:     view.focusIdx,
       };
       const rest = (ctx.state.settings?.lights_showcase_presets || []).filter((p) => p.name !== name);
       try {
