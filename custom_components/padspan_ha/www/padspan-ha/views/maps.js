@@ -1841,14 +1841,22 @@ function _edit(ctx, map, allMaps){
       const sid = r.source ? _sid(r.source) : "";
       mk.title = (r.label || r.id || "receiver") + (sid ? ` [${sid}]` : "") + (r.room ? ` • ${r.room}` : "");
       mk.textContent = sid || (r.label || r.id || "R").slice(0,2).toUpperCase();
-      mk.addEventListener("click", (ev)=>{
-        if(ctx.state.maps._mode==="measure") return; // let click pass through to stage
-        ev.stopPropagation();
+      // Desktop selection: click a marker to load its label + room editor.
+      // Mobile selection: the same edit panel via _makeDraggable's onTap —
+      // touch browsers suppress click after a preventDefault'd touchstart,
+      // so without onTap a tap only starts a drag and never opens the editor.
+      const _selectRx = ()=>{
+        if(ctx.state.maps._mode==="measure") return; // let tap pass through to stage
         if(ctx.state.maps._mode!=="receivers") return;
         ctx.state.maps._selectedRxId = r.id;
         renderAll(); renderTools();
+      };
+      mk.addEventListener("click", (ev)=>{
+        if(ctx.state.maps._mode==="measure") return; // let click pass through to stage
+        ev.stopPropagation();
+        _selectRx();
       });
-      _makeDraggable(mk, r, overlay, ()=>{ renderAll(); refreshList(); }, ()=>ctx.state.maps._mode==="receivers", (v)=>{ if(ctx.state.maps) ctx.state.maps._editDragging=v; });
+      _makeDraggable(mk, r, overlay, ()=>{ renderAll(); refreshList(); }, ()=>ctx.state.maps._mode==="receivers", (v)=>{ if(ctx.state.maps) ctx.state.maps._editDragging=v; }, _selectRx);
       overlay.appendChild(mk);
     }
 
@@ -1963,10 +1971,17 @@ function _edit(ctx, map, allMaps){
       const sel = ctx.state.maps._draftReceivers.find(x=>x.id===ctx.state.maps._selectedRxId) || null;
       if(sel){
         const lbl = el("input",{type:"text", value: sel.label||"", placeholder:"Receiver label"});
+        lbl.setAttribute("aria-label", "Receiver label");
         lbl.addEventListener("input", ()=>{ sel.label = lbl.value; renderAll(); refreshList(); });
 
+        // Same room choices as Add receiver: eligibleRooms (HA areas for this
+        // floor + tag-map + snapshot rooms), prefilled from the selected
+        // receiver's current draft room. Change flows to Save Layout via the
+        // existing draft → mapsUpdateQuiet payload (full receivers list).
+        const roomLbl = el("label",{class:"muted", style:"font-size:12px;margin-top:6px", for:"_rx_room_sel"}, "Room");
         const roomSel = document.createElement("select");
         roomSel.className = "select";
+        roomSel.id = "_rx_room_sel";
         const opt0 = document.createElement("option"); opt0.value=""; opt0.textContent="(no room)"; roomSel.appendChild(opt0);
         for(const r of eligibleRooms){
           const o = document.createElement("option");
@@ -1986,7 +2001,7 @@ function _edit(ctx, map, allMaps){
             el("div",{class:"muted", style:"font-size:12px"}, `x=${(sel.x||0).toFixed(3)} y=${(sel.y||0).toFixed(3)}`),
           ]),
           lbl,
-          el("div",{class:"muted", style:"font-size:12px;margin-top:6px"},"Room"),
+          roomLbl,
           roomSel,
           el("button",{class:"btn inline", style:"margin-top:8px", onclick:()=>{
             ctx.state.maps._draftReceivers = ctx.state.maps._draftReceivers.filter(x=>x.id!==sel.id);
@@ -1995,7 +2010,7 @@ function _edit(ctx, map, allMaps){
           }}, "Delete receiver"),
         ]));
       } else {
-        right.appendChild(el("div",{class:"muted", style:"margin-top:10px;font-size:12px"}, "Tip: click a radio marker to edit its room assignment."));
+        right.appendChild(el("div",{class:"muted", style:"margin-top:10px;font-size:12px"}, "Tip: tap or click a radio marker to edit its room assignment, or use Edit next to a placed radio below."));
       }
 
       // Live BLE Radios panel — shows actual HA BLE scanners for placement
@@ -2007,7 +2022,8 @@ function _edit(ctx, map, allMaps){
         right.appendChild(el("div",{class:"muted", style:"font-size:11px;margin-top:2px;margin-bottom:6px"}, "Click Add to place on map, then drag to position."));
         const radList = el("div",{style:"display:flex;flex-direction:column;gap:5px"});
         for(const radio of liveRadios){
-          const alreadyPlaced = ctx.state.maps._draftReceivers.some(r => (r.source && r.source === radio.source) || (r.label && radio.name && r.label.toLowerCase() === radio.name.toLowerCase()) || r.id === radio.source);
+          const placedRx = ctx.state.maps._draftReceivers.find(r => (r.source && r.source === radio.source) || (r.label && radio.name && r.label.toLowerCase() === radio.name.toLowerCase()) || r.id === radio.source) || null;
+          const alreadyPlaced = !!placedRx;
           const sid = _sid(radio.source || "");
           const borderColor = radio.disabled ? "#5b3b7a" : radio.lost ? "#7d5c2b" : "#1b3526";
           const bg = radio.disabled ? "rgba(148,100,220,.06)" : radio.lost ? "rgba(245,158,11,.06)" : "#0a150e";
@@ -2028,7 +2044,15 @@ function _edit(ctx, map, allMaps){
           } else if(radio.lost){
             row.appendChild(el("span",{style:"font-size:10px;color:#f59e0b;white-space:nowrap"}, "⚠ Lost"));
           } else if(alreadyPlaced){
+            // Existing room editing: selecting a placed radio loads the same
+            // label + room editor above (identical eligibleRooms choices as Add
+            // receiver, same draft, same Save Layout persistence). Identity,
+            // coordinates and all other properties preserved — only room/label
+            // edits change until Save. No backend/schema change.
             row.appendChild(el("span",{style:"font-size:10px;color:#52b788;white-space:nowrap"}, "✓ placed"));
+            row.appendChild(el("button",{class:"btn inline", style:"font-size:10px;padding:2px 8px;white-space:nowrap", onclick:()=>{
+              ctx.state.maps._selectedRxId = placedRx.id; renderAll(); renderTools();
+            }}, "Edit"));
           } else {
             row.appendChild(el("button",{class:"btn inline", style:"font-size:10px;padding:2px 8px;white-space:nowrap", onclick:()=>{
               const id = `rx_${Date.now().toString(16)}`;
@@ -3165,13 +3189,24 @@ function _layoutText(receivers, roomBounds){
 // Makes a receiver marker node draggable within its container. Updates the
 // receiver's (x,y) coordinates in normalized 0–1 space as the user drags.
 // onDragState callback sets ctx.state.maps._editDragging to suppress re-renders.
-function _makeDraggable(node, receiver, container, onMoved=null, isEnabled=null, onDragState=null){
+// onTap callback selects the receiver on a tap (no drag) — the mobile
+// equivalent of the desktop marker click, which touch browsers suppress after
+// a preventDefault'd touchstart. Movement beyond _TAP_PX cancels the tap so a
+// real drag never selects mid-gesture; movement below it is never applied, so
+// a tap never moves the receiver. The drag/commit path itself is
+// untouched by this change (see companion PR #74 for the touch-drag fix).
+function _makeDraggable(node, receiver, container, onMoved=null, isEnabled=null, onDragState=null, onTap=null){
   let dragging = false;
   let rect = null;
+  let _tapX = 0, _tapY = 0, _tapMoved = false;
+  const _TAP_PX = 10;
 
   const onDown = (ev)=>{
     if(isEnabled && !isEnabled()) return;
     dragging = true;
+    _tapMoved = false;
+    if(ev && ev.touches && ev.touches[0]){ _tapX = ev.touches[0].clientX; _tapY = ev.touches[0].clientY; }
+    else if(ev){ _tapX = ev.clientX || 0; _tapY = ev.clientY || 0; }
     if(onDragState) onDragState(true);
     rect = container.getBoundingClientRect();
     ev.preventDefault();
@@ -3180,6 +3215,13 @@ function _makeDraggable(node, receiver, container, onMoved=null, isEnabled=null,
     if(!dragging || !rect) return;
     const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
     const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+    if(Math.abs(clientX - _tapX) > _TAP_PX || Math.abs(clientY - _tapY) > _TAP_PX) _tapMoved = true;
+    // Arm the move only once this is genuinely a drag. Below the threshold
+    // nothing is applied, so a tap (or a fingertip's jitter under it) can
+    // never nudge the receiver — the same rule the Lights map's hex drag
+    // uses. Without this a jittery tap both selected AND moved the receiver
+    // by up to _TAP_PX, silently, and Save Layout persisted the nudge.
+    if(!_tapMoved) return;
     const x = (clientX - rect.left)/rect.width;
     const y = (clientY - rect.top)/rect.height;
     receiver.x = clamp01(x);
@@ -3201,6 +3243,11 @@ function _makeDraggable(node, receiver, container, onMoved=null, isEnabled=null,
     dragging = false;
     if(onDragState) onDragState(false);
     rect = null;
+    // A tap (no drag movement) fires onTap instead of onMoved — the mobile
+    // selection path. Drags fall through to onMoved exactly as before.
+    const wasTap = !_tapMoved;
+    _tapMoved = false;
+    if(wasTap && onTap){ onTap(); return; }
     if(onMoved) onMoved();
   };
 
