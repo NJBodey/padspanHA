@@ -4,6 +4,13 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.40 — Stable promotion of the Mobile Mapping fixes and Lights builder crash fix (2026-09-14)
+
+### Promoted to stable
+- **Changed:** everything in 0.38.39 below, promoted from beta to stable — no code changes since.
+
+---
+
 ## 0.38.39 — Mobile Mapping fixes, a searchable calibration beacon picker, and a Lights builder crash fix (2026-09-13)
 
 ### Three contributions from Alfiegerner, merged with follow-up fixes
