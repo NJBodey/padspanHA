@@ -7850,10 +7850,20 @@ function _wireDoorCircle(ctx, isoDiv, svg, o, toVB, frame, mapState) {
 // the click, topmost first, so "Click" is never wrong about which marker
 // wins. Returns stackAt for the Alt+click cycle in the marker handler.
 function _wireHoverHud(ctx, isoDiv, svg, o) {
+  const { el } = ctx.helpers;
   // The panel lives in shadow DOM: document.elementsFromPoint stops at the
-  // shadow HOST and never sees the SVG. The stage's own root does.
-  const root = isoDiv.getRootNode();
-  const fromPoint = (x, y) => (root && root.elementsFromPoint ? root : document).elementsFromPoint(x, y);
+  // shadow HOST and never sees the SVG. The stage's own root does — but
+  // isoDiv is wired (this function runs) BEFORE it is necessarily inserted
+  // into that shadow tree, so getRootNode() called once here can capture
+  // isoDiv itself (a disconnected node is its own root) instead of the real
+  // ShadowRoot, permanently — the fallback below then silently uses
+  // `document`, which finds nothing every time (2026-09-13, live: "no
+  // working mouse over" — the hover HUD's stack was always empty). Resolve
+  // the root FRESH on every call instead of caching it once.
+  const fromPoint = (x, y) => {
+    const root = isoDiv.getRootNode();
+    return (root && root.elementsFromPoint ? root : document).elementsFromPoint(x, y);
+  };
   const stackAt = (x, y) => {
     const seen = new Set(), out = [];
     for (const n of fromPoint(x, y)) {
@@ -7920,6 +7930,7 @@ function _wireHoverHud(ctx, isoDiv, svg, o) {
 }
 
 function _wireLightsPicker(ctx, isoDiv, svg, o, toVB) {
+  const { el } = ctx.helpers;
   const close = () => {
     const old = isoDiv.querySelector(".lpick");
     if (old) old.remove();

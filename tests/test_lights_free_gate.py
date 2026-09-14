@@ -150,8 +150,13 @@ function renderFor(tier) {
     hostModelSame: host.model === model,
     codes, shapes: shapesOut, wled, partition,
     placedMarkers: (svg.match(/data-placed="1"/g) || []).length,
-    stripHasTransform: /<g class="lhex" data-eid="light\.strip"[^>]*>\s*<g transform=/.test(svg)
-      || (marker("light.strip") || "").includes("transform="),
+    stripHasTransform: (() => {
+      const start = svg.indexOf('data-eid="light.strip"');
+      if (start < 0) return false;
+      const nextStart = svg.indexOf('<g class="lhex"', start + 1);
+      const g = svg.slice(start, nextStart > 0 ? nextStart : svg.length);
+      return /<g transform=/.test(g);
+    })(),
     stripMarker: marker("light.strip"),
     loftDrawn: !!marker("light.loft"),
     buttons,

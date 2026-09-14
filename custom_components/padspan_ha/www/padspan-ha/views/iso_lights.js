@@ -3317,6 +3317,17 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         ? `<g transform="${t.join(" ")}">`+shapeSvg(l.shape, 0, 0, HEX_R, a)+`</g>`
         : shapeSvg(l.shape, hx, hy, HEX_R, a);
 
+      // Baseline click/drag target, same fixed HEX_R footprint as
+      // suppressGlyph's circle below — NOT layer()'s real (possibly
+      // rotated/stretched) silhouette. Without this, a thin or elongated
+      // glyph (a "bar" fixture) is only clickable on its own painted
+      // pixels, leaving real gaps around a marker that reads, at a glance,
+      // as one solid clickable object (Garry, 2026-09-13: "the center of
+      // the object is selectable and hard to discern... These need to line
+      // up and be visually more functional").
+      const BASE_HIT=`<circle data-hit="1" fill="transparent" stroke="none" pointer-events="all" `+
+        `cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${HEX_R}"/>`;
+
       let body;
       if(suppressGlyph){
         // The aura is this fixture's visual now; what remains here is a
@@ -3355,12 +3366,13 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
               ? `<g transform="${t.join(" ")}">`+shapeDetailSvg(l.shape,0,0,HEX_R,ink,sw)+`</g>`
               : shapeDetailSvg(l.shape,hx,hy,HEX_R,ink,sw))
           : "";
-        body=(on?layer(`fill="none" stroke="${lit}" stroke-width="${(sw*2.6).toFixed(2)}" stroke-opacity="${THEME.fixtureBloomOpacity}" stroke-linejoin="round"`):"")+
+        body=BASE_HIT+
+          (on?layer(`fill="none" stroke="${lit}" stroke-width="${(sw*2.6).toFixed(2)}" stroke-opacity="${THEME.fixtureBloomOpacity}" stroke-linejoin="round"`):"")+
           layer(`fill="${fill}" stroke="${stroke}" stroke-width="${sw.toFixed(2)}" stroke-opacity="${on?THEME.fixtureBodyOnOpacity:THEME.fixtureBodyOffOpacity}" stroke-linejoin="round"`)+
           detail+
           layer(`fill="url(#psgloss)" stroke="none" pointer-events="none"`);
       } else {
-        body=layer(`fill="${fill}" stroke="${stroke}" stroke-width="${sw.toFixed(2)}"`);
+        body=BASE_HIT+layer(`fill="${fill}" stroke="${stroke}" stroke-width="${sw.toFixed(2)}"`);
       }
 
       // Showcase moves the code out from under the glyph. At CODE_PX the label
@@ -3399,13 +3411,25 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       // editing view) still draws nothing: that label was pointer-events
       // "none" even when shown, so no live hit region has ever depended on
       // it — hiding it changes what is drawn, not what is clickable.
+      // Same sizing formula as codeChipSvg's own invisible rect. Unlike that
+      // rect, this one is new: this plain label was pointer-events="none"
+      // even when shown, so no hit region ever depended on it — this is the
+      // first thing to make it tappable (Garry, 2026-09-13: "the text label
+      // is not clickable").
+      const labelHit=(cx,cy,fs)=>{
+        const w=String(l.code||"").length*fs*0.64+fs*0.9, h=fs*1.5;
+        return `<rect data-hit="1" x="${(cx-w/2).toFixed(1)}" y="${(cy-h/2).toFixed(1)}" `+
+          `width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="transparent" stroke="none" pointer-events="all"/>`;
+      };
       const lbl=tempLbl!==null ? tempLbl : (HIDECODES ? (CODECHIP ? codeChipSvg(l,hx,hy,SHOW?tCol:"#e2e8f0",chipGap,true) : "") : (CODECHIP ? codeChipSvg(l,hx,hy,SHOW?tCol:"#e2e8f0",chipGap) : (SHOW
-        ? `<text x="${hx.toFixed(1)}" y="${lblY.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" `+
+        ? labelHit(hx,lblY,CODE_PX*0.92)+
+          `<text x="${hx.toFixed(1)}" y="${lblY.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" `+
           `font-family="ui-monospace,monospace" font-size="${(CODE_PX*0.92).toFixed(1)}" font-weight="700" `+
           `letter-spacing="0.06em" fill="${tCol}" paint-order="stroke" stroke="#050d09" `+
           `stroke-width="${(CODE_PX*0.42).toFixed(1)}" stroke-linejoin="round" pointer-events="none">`+
           `${escSVG(l.code)}</text>`
-        : `<text x="${hx.toFixed(1)}" y="${hy.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" `+
+        : labelHit(hx,hy,CODE_PX)+
+          `<text x="${hx.toFixed(1)}" y="${hy.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" `+
           `font-family="monospace" font-size="${CODE_PX.toFixed(1)}" font-weight="700" fill="${tCol}" pointer-events="none">`+
           `${escSVG(l.code)}</text>`)));
 
