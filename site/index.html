@@ -176,6 +176,29 @@ footer .links{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin
 
     <div class="relitem">
       <div class="relhead">
+        <span class="relver">v0.38.39</span>
+        <span class="pill soon">Beta channel</span>
+        <span class="reldate">13 September 2026</span>
+      </div>
+      <div class="relbody">
+        <ul>
+          <li><b>Fixed:</b> dragging a receiver marker on a phone (Mapping → Edit) moved it a short distance and then stopped. Every touchmove rebuilt all the markers, which detached the one under the finger, and the browser sent the rest of the gesture to the detached node. The marker now moves live and the list commits once on release. The same detachment also left the panel's drag guard stuck on after every phone drag, so the panel stopped refreshing until a reload — fixed by the same change, and an OS-cancelled gesture (a call, a browser takeover) now releases cleanly too. (<a href="https://github.com/gbroeckling/padspanHA/pull/74">#74</a>)</li>
+          <li><b>Added:</b> tap an already-placed receiver on the Mapping page to edit its label and room, on a phone as well as on a desktop. Previously a tap on mobile never opened the editor, and a placed radio had no edit path short of deleting and re-adding it. Placed rows in the Live BLE Radios list gain an <b>Edit</b> button. A tap applies no movement at all until the finger has travelled more than 10px, so selecting a receiver can never nudge it. (<a href="https://github.com/gbroeckling/padspanHA/pull/76">#76</a>)</li>
+          <li><b>Changed:</b> the calibration beacon device list is a searchable picker instead of a long native dropdown: search by name, stable id or MAC, tracked devices stay RSSI-sorted, raw advertisements keep their own group. Fully keyboard-operable (arrows, Home/End, Enter, Escape) with screen-reader roles. Typing highlights the top match and Enter only picks a highlighted row, so tabbing into the field and pressing Enter can no longer silently select a device. (<a href="https://github.com/gbroeckling/padspanHA/pull/70">#70</a>)</li>
+          <li><b>Fixed:</b> the Lights tab crashed outright on render for about a day: two helper functions used <code>el</code> without binding it from <code>ctx.helpers</code> in their own scope. Both fixed, and a new static scope check fails the test suite if this class of bug comes back.</li>
+          <li><b>Fixed:</b> the hover HUD always reported an empty stack live because it captured the map's root node once, before the map was attached to its shadow tree. It now resolves the root on every hit-test.</li>
+          <li><b>Added:</b> a sticky hover HUD in the map's upper corner names what a click would land on, with every marker stacked underneath it as clickable rows; <b>Alt+click</b> cycles that stack, so a device buried under another marker is reachable without a picker.</li>
+          <li><b>Fixed:</b> markers get an invisible baseline hit-circle and code labels a hit-rect, so thin or rotated glyphs and the plain label text are clickable everywhere, not only on their painted pixels.</li>
+          <li><b>Fixed:</b> room names floated outside their own room on isometric floors (18 of 21 real labels landed outside). The base position now blends toward the room's actual top corner and the fixture-dodge step moves along the same safe line. Live: 21 of 21 inside.</li>
+          <li><b>Fixed:</b> the canvas clipped the topmost room of a 3-floor stack and the left edge of floor slabs; the viewBox now follows the drawing's real extent on all four sides. Room names also step out of the way of temperature readouts and of names already placed on the same floor.</li>
+          <li><b>Changed:</b> transform mode shows a dashed box, reference line and stand-in glyph tracking a move-drag live; a second toggle tap inside the 2.5s optimistic window reverses the first command instead of repeating it; a press refreshes the poll-render guard immediately, closing the gap before the 8px drag arm where a poll could rebuild the map mid-gesture.</li>
+          <li><b>Added:</b> toolbar controls grouped under Presentation / Filters / Automorph / Layout & view; linked door/window rows get Unlink and Steel toggles; the Lights sidebar gets an Apply-only preset bar, and a preset may carry the floor / spacing / left-right layout (optional, so older presets never move the camera).</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="relitem">
+      <div class="relhead">
         <span class="relver">v0.38.38</span>
         <span class="pill stable">Stable</span>
         <span class="reldate">11 September 2026</span>

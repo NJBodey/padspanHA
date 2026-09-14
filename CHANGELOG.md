@@ -4,6 +4,25 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.39 — Mobile Mapping fixes, a searchable calibration beacon picker, and a Lights builder crash fix (2026-09-13)
+
+### Three contributions from Alfiegerner, merged with follow-up fixes
+- **Fixed:** dragging a receiver marker on a phone (Mapping → Edit) moved it a short distance and then stopped. Every touchmove rebuilt all the markers, which detached the one under the finger, and the browser sent the rest of the gesture to the detached node. The marker now moves live and the list commits once on release. The same detachment also left the panel's drag guard stuck on after every phone drag, so the panel stopped refreshing until a reload — fixed by the same change, and an OS-cancelled gesture (a call, a browser takeover) now releases cleanly too. ([#74](https://github.com/gbroeckling/padspanHA/pull/74))
+- **Added:** tap an already-placed receiver on the Mapping page to edit its label and room, on a phone as well as on a desktop. Previously a tap on mobile never opened the editor, and a placed radio had no edit path short of deleting and re-adding it. Placed rows in the Live BLE Radios list gain an **Edit** button. A tap applies no movement at all until the finger has travelled more than 10px, so selecting a receiver can never nudge it. ([#76](https://github.com/gbroeckling/padspanHA/pull/76))
+- **Changed:** the calibration beacon device list is a searchable picker instead of a long native dropdown: search by name, stable id or MAC, tracked devices stay RSSI-sorted, raw advertisements keep their own group. Fully keyboard-operable (arrows, Home/End, Enter, Escape) with screen-reader roles. Typing highlights the top match and Enter only picks a highlighted row, so tabbing into the field and pressing Enter can no longer silently select a device. ([#70](https://github.com/gbroeckling/padspanHA/pull/70))
+
+### Lights builder
+- **Fixed:** the Lights tab crashed outright on render for about a day: two helper functions used `el` without binding it from `ctx.helpers` in their own scope. Both fixed, and a new static scope check fails the test suite if this class of bug comes back.
+- **Fixed:** the hover HUD always reported an empty stack live because it captured the map's root node once, before the map was attached to its shadow tree. It now resolves the root on every hit-test.
+- **Added:** a sticky hover HUD in the map's upper corner names what a click would land on, with every marker stacked underneath it as clickable rows; **Alt+click** cycles that stack, so a device buried under another marker is reachable without a picker.
+- **Fixed:** markers get an invisible baseline hit-circle and code labels a hit-rect, so thin or rotated glyphs and the plain label text are clickable everywhere, not only on their painted pixels.
+- **Fixed:** room names floated outside their own room on isometric floors (18 of 21 real labels landed outside). The base position now blends toward the room's actual top corner and the fixture-dodge step moves along the same safe line. Live: 21 of 21 inside.
+- **Fixed:** the canvas clipped the topmost room of a 3-floor stack and the left edge of floor slabs; the viewBox now follows the drawing's real extent on all four sides. Room names also step out of the way of temperature readouts and of names already placed on the same floor.
+- **Changed:** transform mode shows a dashed box, reference line and stand-in glyph tracking a move-drag live; a second toggle tap inside the 2.5s optimistic window reverses the first command instead of repeating it; a press refreshes the poll-render guard immediately, closing the gap before the 8px drag arm where a poll could rebuild the map mid-gesture.
+- **Added:** toolbar controls grouped under Presentation / Filters / Automorph / Layout & view; linked door/window rows get Unlink and Steel toggles; the Lights sidebar gets an Apply-only preset bar, and a preset may carry the floor / spacing / left-right layout (optional, so older presets never move the camera).
+
+---
+
 ## 0.38.38 — Stable promotion of the 3-month PadSpan Bright Pro trial (2026-09-11)
 
 ### Promoted to stable
