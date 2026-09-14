@@ -7368,6 +7368,7 @@ function _wireLightsBuild(ctx, isoDiv, o) {
 
   _wireLightsPicker(ctx, isoDiv, svg, o, toVB);
   _wireDoorCircle(ctx, isoDiv, svg, o, toVB, frame, mapState);
+  const stackAt = _wireHoverHud(ctx, isoDiv, svg, o);
 
   // The drop-marker pin: a second way to place the selected light, dragged
   // from its parked corner onto the map. Reuses exactly the projection
@@ -7686,14 +7687,28 @@ function _wireLightsBuild(ctx, isoDiv, o) {
           // Shift-click adds to / removes from the multi-selection instead.
           g.removeAttribute("transform");
           for (const m of group) m.g.removeAttribute("transform");
+          // Alt+click: the browser always hands the click to the marker on
+          // TOP, so this is the way to reach one underneath it — the next
+          // marker down the stack at the pointer, cycling round on repeated
+          // Alt+clicks (Garry, 2026-09-12: "make it so the device underneath
+          // can also be selected somehow"). The hover HUD names the stack
+          // (_wireHoverHud) so you can see what you're cycling through.
+          let selEid = eid;
+          if ((e.altKey || ev.altKey) && stackAt) {
+            const stack = stackAt(e.clientX, e.clientY);
+            if (stack.length > 1) {
+              const i = stack.indexOf(o.mapState._selLight ? o.mapState._selLight.eid : null);
+              selEid = stack[i < 0 ? 1 : (i + 1) % stack.length];
+            }
+          }
           if (ev.shiftKey || (o.mapState._multiSelect && e.type !== "pointercancel")) {
-            if (selSet.has(eid)) selSet.delete(eid); else selSet.add(eid);
+            if (selSet.has(selEid)) selSet.delete(selEid); else selSet.add(selEid);
             if (o.mapState._selLight && selSet.size && !selSet.has(o.mapState._selLight.eid)) selSet.add(o.mapState._selLight.eid);
           } else {
             selSet.clear();
           }
-          o.mapState._selLight = { eid, mapId: null };
-          if (longPressed) o.mapState._focusRow = eid;
+          o.mapState._selLight = { eid: selEid, mapId: null };
+          if (longPressed) o.mapState._focusRow = selEid;
           ctx.actions.renderRooms();
           return;
         }
@@ -7825,6 +7840,85 @@ function _wireDoorCircle(ctx, isoDiv, svg, o, toVB, frame, mapState) {
 // telling the truth about size. Right-click lists everything under the
 // pointer, SMALLEST FIRST, because the small one is the one you could not get
 // to any other way.
+// The hover HUD, pinned to the upper-left of the stage's visible area: what
+// a click on the map would land on, and what's stacked underneath it
+// (Garry, 2026-09-12: "add a mouse over in the upper left so I can clearly
+// see the device a click would have me work on... make it so the device
+// underneath can also be selected somehow, and showing in the mouseover
+// text"). A true hit-test, not a bounding-box guess like the right-click
+// picker's — elementsFromPoint returns exactly what the browser would give
+// the click, topmost first, so "Click" is never wrong about which marker
+// wins. Returns stackAt for the Alt+click cycle in the marker handler.
+function _wireHoverHud(ctx, isoDiv, svg, o) {
+  // The panel lives in shadow DOM: document.elementsFromPoint stops at the
+  // shadow HOST and never sees the SVG. The stage's own root does.
+  const root = isoDiv.getRootNode();
+  const fromPoint = (x, y) => (root && root.elementsFromPoint ? root : document).elementsFromPoint(x, y);
+  const stackAt = (x, y) => {
+    const seen = new Set(), out = [];
+    for (const n of fromPoint(x, y)) {
+      const g = n.closest ? n.closest("g.lhex[data-eid]") : null;
+      if (!g || !svg.contains(g)) continue;
+      const eid = g.getAttribute("data-eid");
+      if (!seen.has(eid)) { seen.add(eid); out.push(eid); }
+    }
+    return out;
+  };
+  const roomAt = (x, y) => {
+    for (const n of fromPoint(x, y)) {
+      const g = n.closest ? n.closest("g.lroom[data-room]") : null;
+      if (g && svg.contains(g)) return g.getAttribute("data-room");
+    }
+    return null;
+  };
+
+  // A zero-height sticky anchor rides the stage's own scroll (both axes)
+  // without pushing the drawing down; the box hangs off it.
+  const anchor = el("div", { class: "lv-hoverhud-anchor" });
+  const hud = el("div", { class: "lv-hoverhud" });
+  hud.hidden = true;
+  anchor.appendChild(hud);
+  isoDiv.insertBefore(anchor, svg);
+
+  const label = (eid) => {
+    const l = o.lightsByEid[eid];
+    return l ? `${l.code ? l.code + " · " : ""}${l.friendly_name || eid}` : eid;
+  };
+  let lastKey = "";
+  const show = (stack, room) => {
+    const key = stack.join("|") + "#" + (room || "");
+    if (key === lastKey) return;
+    lastKey = key;
+    hud.innerHTML = "";
+    if (!stack.length && !room) { hud.hidden = true; return; }
+    hud.hidden = false;
+    if (stack.length) {
+      hud.appendChild(el("div", { class: "lv-hoverhud-hit" }, [el("span", { class: "lv-hoverhud-k" }, "Click"), label(stack[0])]));
+      for (const eid of stack.slice(1)) {
+        hud.appendChild(el("button", { class: "lv-hoverhud-under",
+          title: "Select this one instead — it's under the marker on top",
+          onclick: () => {
+            (o.mapState._selSet || new Set()).clear();
+            o.mapState._selLight = { eid, mapId: null };
+            ctx.actions.renderRooms();
+          } }, [el("span", { class: "lv-hoverhud-k" }, "Under"), label(eid)]));
+      }
+      if (stack.length > 1) hud.appendChild(el("div", { class: "lv-hoverhud-hint" }, "Alt+click cycles through the stack · right-click lists everything here"));
+    } else {
+      const n = Object.values(o.lightsByEid).filter(l => l.area_name === room).length;
+      hud.appendChild(el("div", { class: "lv-hoverhud-hit" }, [el("span", { class: "lv-hoverhud-k" }, "Click"), `${room} — selects its ${n} device${n === 1 ? "" : "s"}`]));
+    }
+  };
+  isoDiv.addEventListener("pointermove", (ev) => {
+    if (ev.pointerType === "touch") return;
+    if (hud.contains(ev.target)) return;          // reading the HUD must not clear it
+    if (o.mapState._editDragging) return;
+    show(stackAt(ev.clientX, ev.clientY), roomAt(ev.clientX, ev.clientY));
+  });
+  isoDiv.addEventListener("pointerleave", () => show([], null));
+  return stackAt;
+}
+
 function _wireLightsPicker(ctx, isoDiv, svg, o, toVB) {
   const close = () => {
     const old = isoDiv.querySelector(".lpick");

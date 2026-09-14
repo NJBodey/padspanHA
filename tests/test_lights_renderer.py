@@ -2079,12 +2079,13 @@ def test_room_label_steps_out_of_a_markers_way_by_its_own_rendered_width(tmp_pat
     def render_with_room_name(room_name):
         model = {
             "room_geometry_m": {room_name: {"type": "poly", "floor_id": "main", "points_m": [[0, 0], [6, 0], [6, 3], [0, 3]]}},
-            # Calibrated against this exact room polygon (re-tuned 2026-09-07
-            # for the smaller rfsBase — "takes up too much space"): lands
-            # inside a long name's (now narrower) half-width, outside a
-            # short one's, and within the (unchanged) ±9px vertical band
-            # either way.
-            "light_positions_m": {"binary_sensor.probe": {"x_m": 0.7, "y_m": -0.4, "floor_id": "main"}},
+            # Calibrated against this exact room polygon (re-tuned 2026-09-12
+            # when the label's BASE position moved off a bare topmost-vertex
+            # y to a centroid/top-corner blend — see TOP_BLEND in iso_lights.js
+            # — which shifted every screen coordinate here): lands inside a
+            # long name's (now narrower) half-width, outside a short one's,
+            # and within the (unchanged) ±9px vertical band either way.
+            "light_positions_m": {"binary_sensor.probe": {"x_m": 1.815, "y_m": 1.108, "floor_id": "main"}},
         }
         lbe = {"binary_sensor.probe": {"entity_id": "binary_sensor.probe", "state": "off", "code": "M08", "shape": "motion", "isMotion": True, "last_changed": None}}
         return _run_js(tmp_path, (
@@ -2105,11 +2106,14 @@ def test_room_label_steps_out_of_a_markers_way_by_its_own_rendered_width(tmp_pat
         f"own rendered width reaches over — long={long_name}, short={short_name}"
     )
     # The short name's marker sits outside even ITS OWN (narrower) window,
-    # so it must render at the plain, unshifted top-edge position — proving
-    # the fix didn't just make the window bigger for everyone.
-    assert short_name["y"] == long_name["y"] + 13, (
-        f"the short name should be exactly one 13px step below the long "
-        f"name's shifted position, not shifted itself: long={long_name}, short={short_name}"
+    # so it must render at the plain, unshifted base position — proving the
+    # fix didn't just make the window bigger for everyone. Not "exactly one
+    # 13px step" (2026-09-12: the step became a bigger blend fraction along
+    # the room's own centroid-to-corner line, not a fixed pixel delta — see
+    # BLEND_STEP in iso_lights.js), just "clearly did not step at all".
+    assert short_name["y"] > long_name["y"] + 10, (
+        f"the short name should sit at its plain, unshifted position, well "
+        f"below the long name's shifted one: long={long_name}, short={short_name}"
     )
 
 
@@ -5163,18 +5167,30 @@ def test_room_label_steps_out_of_a_fresh_temperature_readouts_way(tmp_path):
     iso = lambda ms: datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.timezone.utc).isoformat()
     model = {
         "room_geometry_m": {"Hall": {"type": "poly", "floor_id": "main", "points_m": [[0, 0], [8, 0], [8, 4], [0, 4]]}},
-        # Calibrated against this polygon: under the name's x, ~11px below
-        # its baseline — outside a marker's ±9px band, inside the digits'.
-        "light_positions_m": {"sensor.t": {"x_m": 1.35, "y_m": -0.65, "floor_id": "main"}},
+        # Calibrated against this polygon (re-tuned 2026-09-12 alongside the
+        # label's own base-position fix): under the name's x, just past a
+        # marker's ±9px band but inside the fresh digits' much taller one.
+        "light_positions_m": {"sensor.t": {"x_m": 2.29, "y_m": 0.99, "floor_id": "main"}},
     }
     def lbe(age_ms):
         return {"sensor.t": {"entity_id": "sensor.t", "state": "on", "code": "T01", "shape": "tempreadout",
                              "isTemp": True, "temperature": 20, "last_changed": iso(NOW - age_ms)}}
+    baseline_model = {**model, "light_positions_m": {}}
+    baseline = _room_label_y(tmp_path, baseline_model, {}, "Hall", NOW)
     fresh = _room_label_y(tmp_path, model, lbe(60_000), "Hall", NOW)
     stale = _room_label_y(tmp_path, model, lbe(2 * 3_600_000), "Hall", NOW)
-    assert fresh["y"] == stale["y"] - 13, (
-        "a fresh readout's digits under the name must push it up exactly one "
-        f"13px step; a stale one (plain code) must not: fresh={fresh} stale={stale}"
+    # Not "exactly one step": the digits' own half-height is wider than the
+    # 13px step itself, so a fresh reading here clears the collision window
+    # in three steps, not one — the meaningful fact is that it steps AT ALL
+    # while a stale reading (a plain, marker-sized code) never moves off the
+    # same unshifted position an empty room renders at.
+    assert fresh["y"] < baseline["y"], (
+        "a fresh readout's digits under the name must push it up; "
+        f"baseline={baseline} fresh={fresh}"
+    )
+    assert stale["y"] == baseline["y"], (
+        "a stale reading (plain code, marker-sized) must not move the name "
+        f"at all: baseline={baseline} stale={stale}"
     )
 
 
@@ -5196,7 +5212,63 @@ def test_room_labels_step_out_of_each_others_way(tmp_path):
     b = _room_label_y(tmp_path, model, {}, "Powder Room")
     # Their boxes genuinely collide on the same row (the bug's precondition)...
     assert abs((a["x"] + a["w"] / 2) - (b["x"] + b["w"] / 2)) < (a["w"] + b["w"]) / 2, (a, b)
-    # ...so the second one placed must have stepped up off the first.
-    assert b["y"] == a["y"] - 13, (
-        f"the second name must step up one 13px step off the first: a={a} b={b}"
+    # ...so the second one placed must have stepped up off the first — but
+    # "Powder Room" here is tiny (1.5m x 1m), too small to clear a full 13px
+    # step without leaving its own room entirely, so the step is capped
+    # short of 13px rather than skipped outright (2026-09-12 audit, live: a
+    # full step on a small room like this put the name back outside it,
+    # right after the base-position fix had just put it inside).
+    assert 0 < a["y"] - b["y"] < 13, (
+        f"the second name must step up, but capped before a full 13px step "
+        f"would carry it outside its own tiny room: a={a} b={b}"
     )
+
+
+def test_room_label_always_lands_inside_its_own_room_polygon(tmp_path):
+    """2026-09-12, Garry: "the room text is still way off being in the room,
+    so it is hard to tell which room is which from the text label" — live on
+    the real house, 18 of 21 room labels landed outside their own room (the
+    old base position was "centroid x, topmost SCREEN y", correct only for a
+    room whose top is a wide edge; an isometric room's top is one narrow
+    CORNER). The base position now blends toward that corner in BOTH axes
+    (TOP_BLEND), and the marker/label avoidance step is capped at the room's
+    own topmost vertex so dodging a collision can never carry the name back
+    outside — checked here with an L-shaped room (the real shape class that
+    broke a pure centroid-average) AND a fixture placed to force the full
+    3-step avoidance."""
+    model = {
+        "room_geometry_m": {
+            # An L-shape: the plain vertex-average centroid of an L sits in
+            # its own notch, outside the room — the failure mode a simple
+            # rectangle can never exercise.
+            "Nook": {"type": "poly", "floor_id": "main",
+                     "points_m": [[0, 0], [4, 0], [4, 1.5], [1.5, 1.5], [1.5, 4], [0, 4]]},
+        },
+        "light_positions_m": {"binary_sensor.probe": {"x_m": 2, "y_m": 0.5, "floor_id": "main"}},
+    }
+    lbe = {"binary_sensor.probe": {"entity_id": "binary_sensor.probe", "state": "off", "code": "M08",
+                                   "shape": "motion", "isMotion": True, "last_changed": None}}
+    out = _run_js(tmp_path, (
+        "import * as M from './iso_lights.mjs';\n"
+        f"const MODEL={json.dumps(model)};\n"
+        f"const LBE={json.dumps(lbe)};\n"
+        "const FLOORS=[{id:'main',name:'Main',level:0}];\n"
+        "function pip(pt, poly) {\n"
+        "  let inside = false;\n"
+        "  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {\n"
+        "    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];\n"
+        "    if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi)) inside = !inside;\n"
+        "  }\n"
+        "  return inside;\n"
+        "}\n"
+        "const frame = M.fabricFrame(MODEL, FLOORS, 150, 0);\n"
+        "const svg=M.buildIsoSVG(MODEL,{},new Set(),null,150,0,LBE,false,FLOORS,{});\n"
+        "const i=svg.indexOf('data-room=\"Nook\"');\n"
+        "const z=+/data-z=\"([\\d.-]+)\"/.exec(svg.slice(i,i+60))[1];\n"
+        "const m=/<rect x=\"([\\d.-]+)\" y=\"([\\d.-]+)\" width=\"([\\d.-]+)\" height=\"([\\d.-]+)\"/"
+        ".exec(svg.slice(svg.indexOf('<rect x=\"', i), svg.indexOf('<rect x=\"', i)+120));\n"
+        "const lx=+m[1]+ +m[3]/2, ly=+m[2]+ +m[4]/2;\n"
+        "const [mx,my]=frame.isoInv(lx,ly,z);\n"
+        "console.log(JSON.stringify({inside: pip([mx,my], MODEL.room_geometry_m.Nook.points_m), mx, my}));\n"
+    ))
+    assert out["inside"], f"the room name must land inside its own room polygon: {out}"

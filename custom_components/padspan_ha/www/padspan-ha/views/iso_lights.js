@@ -5189,13 +5189,26 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       // stored position belongs in the middle of its room, not wherever the
       // name happens to be drawn.
       const [ccx,ccy]=iso(cx,cy,z);
-      const lix=ccx;
-      // The name sits near the room's TOP edge, not on its centroid. Fixtures
-      // cluster around the middle of a room, so a centred name had a marker
-      // punched through it in almost every room — "Garry's Office" with a hex
-      // over the "y's". Horizontally it still tracks the centroid, so it reads
-      // as that room's title rather than drifting to a corner.
-      let liy=Math.min(...ipts.map(p=>p[1]))+8;
+      // The name sits toward the room's TOP, not its centroid — fixtures
+      // cluster around the middle, so a centred name had a marker punched
+      // through it in almost every room ("Garry's Office" with a hex over
+      // the "y's"). But the room is drawn as an ISOMETRIC DIAMOND, not a
+      // rectangle: its topmost screen point is a single CORNER, not a wide
+      // edge, so "centroid x, topmost y" put the label above that corner's
+      // own narrow tip — outside the diamond for all but the squarest rooms
+      // (2026-09-12 visual audit, live: 18 of this house's 21 room labels
+      // landed outside their own room). Blending part way from the centre
+      // toward that same corner keeps BOTH axes on one line between an
+      // interior point and a real vertex, which stays inside any room shape
+      // without needing a wide top edge to exist at all — checked against
+      // every room in this house at blends from 0.2 to 0.5, all landed
+      // inside; 0.35 keeps the name recognizably toward the top.
+      let topIx=ipts[0];
+      for(const p of ipts) if(p[1]<topIx[1]) topIx=p;
+      const TOP_BLEND=0.35;
+      let blendFrac=TOP_BLEND;
+      let lix=ccx+(topIx[0]-ccx)*blendFrac;
+      let liy=ccy+(topIx[1]-ccy)*blendFrac;
       // The label's own rendered footprint, computed here (not down by the
       // <text> itself) because the collision check below needs it.
       // Trimmed ~10% (Garry, 2026-09-07: room names were "too much space" —
@@ -5250,7 +5263,22 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         // audit) were drawn through each other, each checked only against
         // fixtures, never against the other's label.
         const overLabel=(ly)=>placedLabels.some(p=>Math.abs(p.x-lix)<(p.w+rw)/2 && Math.abs(p.y-ly)<(p.h+rh)/2);
-        for(let tries=0; tries<3 && (near(liy)||overLabel(liy)); tries++) liy-=13;
+        // A raw pixel step (the old "liy-=13") moves off the centroid-to-
+        // corner line the base position relies on to stay inside the room —
+        // three 13px steps easily overshot a small room's own extent right
+        // back outside it (2026-09-12 audit, live: dodging a fixture/label
+        // put SpareBedroomBath, Kitchen, Pantry and more back outside,
+        // immediately after the base-position fix had put them inside).
+        // Advancing along the SAME safe line instead — a bigger blend
+        // toward the corner, both axes together — never leaves it: every
+        // room in this house stayed inside at blends up to 0.95, so 0.35 up
+        // to 0.80 in three 0.15 steps has real headroom to spare.
+        const BLEND_STEP=0.15, BLEND_MAX=0.8;
+        for(let tries=0; tries<3 && (near(liy)||overLabel(liy)) && blendFrac<BLEND_MAX; tries++){
+          blendFrac=Math.min(BLEND_MAX, blendFrac+BLEND_STEP);
+          lix=ccx+(topIx[0]-ccx)*blendFrac;
+          liy=ccy+(topIx[1]-ccy)*blendFrac;
+        }
         placedLabels.push({x:lix, y:liy, w:rw, h:rh});
       }
       if(SHOW){
