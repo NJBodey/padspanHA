@@ -4,6 +4,26 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.41 — Outdoor gear on the floor map, temperature tints, clickable plates, hover HUD everywhere, quiet motion after a restart (2026-09-14)
+
+### Placing outdoor gear
+- **Fixed:** a device whose HA area is on the Outside floor (a shed, the garden, the driveway) could not be placed on the map at all. The floor stack never draws outdoor rooms, and a device's floor always came from its room first, so every placement path wrote it straight back off the map. An outdoor room no longer anchors a device's floor: drop it with the pin, or queue it and tap the map, on any real floor plate — just outside the room it lives beside — and that is where it draws. Nothing already saved moves.
+- **Changed:** the drop-marker pin and the queue's tap-the-map both land a first placement on the floor plate you actually dropped it on (by geometry against the plate), instead of always the lowest storey.
+- **Changed:** the inspector says so for an outdoor-room device — "its room is outdoors — drag the pulsing pin onto the floor it sits beside" — instead of asking you to assign a room.
+
+### Temperature readouts
+- **Added:** a live temperature reading tints its marker and digits — blue under 20°, red at or above 20°, bright orange over 34°. Only a live readout (placed, reported within the hour) is tinted; a stale or unplaced sensor keeps its plain marker. The sidebar shows the same.
+
+### Clicking what you can see
+- **Fixed:** devices placed outside a room on a real floor could not be selected. In the exploded stack the next storey's floor plate overlaps a lower plate's back edge, and the plate took the click — the marker was visible through it but unreachable. Floor plates never take a click now; the floor badge still does.
+- **Fixed:** the hover HUD "stopped working" — it was working, drawn above the window once the page was scrolled, and then, pinned to the top, exactly under the sticky toolbar. It now sits at the top-left of the visible map, below the toolbar, wherever the page is scrolled.
+- **Added:** the same hover HUD in the **Lights** sidebar. There, an "Under" row does what a tap on that marker does — motion opens its activity, a dimmable or strip opens its controls, anything else toggles.
+
+### Motion sensors after a restart
+- **Fixed:** after an HA restart every motion sensor on the map flashed for five minutes and then walked the whole six-hour colour ring, because a restored entity's last change is the boot moment. The integration now records when it started; a quiet sensor whose only timestamp is the restart draws nothing until it actually changes. A sensor honestly reporting motion at boot keeps its pulse.
+
+---
+
 ## 0.38.40 — Stable promotion of the Mobile Mapping fixes and Lights builder crash fix (2026-09-14)
 
 ### Promoted to stable

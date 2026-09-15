@@ -176,6 +176,26 @@ footer .links{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin
 
     <div class="relitem">
       <div class="relhead">
+        <span class="relver">v0.38.41</span>
+        <span class="pill soon">Beta channel</span>
+        <span class="reldate">14 September 2026</span>
+      </div>
+      <div class="relbody">
+        <ul>
+          <li><b>Fixed:</b> a device whose HA area is on the Outside floor (a shed, the garden, the driveway) could not be placed on the map at all. The floor stack never draws outdoor rooms, and a device's floor always came from its room first, so every placement path wrote it straight back off the map. An outdoor room no longer anchors a device's floor: drop it with the pin, or queue it and tap the map, on any real floor plate — just outside the room it lives beside — and that is where it draws. Nothing already saved moves.</li>
+          <li><b>Changed:</b> the drop-marker pin and the queue's tap-the-map both land a first placement on the floor plate you actually dropped it on (by geometry against the plate), instead of always the lowest storey.</li>
+          <li><b>Changed:</b> the inspector says so for an outdoor-room device — "its room is outdoors — drag the pulsing pin onto the floor it sits beside" — instead of asking you to assign a room.</li>
+          <li><b>Added:</b> a live temperature reading tints its marker and digits — blue under 20°, red at or above 20°, bright orange over 34°. Only a live readout (placed, reported within the hour) is tinted; a stale or unplaced sensor keeps its plain marker. The sidebar shows the same.</li>
+          <li><b>Fixed:</b> devices placed outside a room on a real floor could not be selected. In the exploded stack the next storey's floor plate overlaps a lower plate's back edge, and the plate took the click — the marker was visible through it but unreachable. Floor plates never take a click now; the floor badge still does.</li>
+          <li><b>Fixed:</b> the hover HUD "stopped working" — it was working, drawn above the window once the page was scrolled, and then, pinned to the top, exactly under the sticky toolbar. It now sits at the top-left of the visible map, below the toolbar, wherever the page is scrolled.</li>
+          <li><b>Added:</b> the same hover HUD in the <b>Lights</b> sidebar. There, an "Under" row does what a tap on that marker does — motion opens its activity, a dimmable or strip opens its controls, anything else toggles.</li>
+          <li><b>Fixed:</b> after an HA restart every motion sensor on the map flashed for five minutes and then walked the whole six-hour colour ring, because a restored entity's last change is the boot moment. The integration now records when it started; a quiet sensor whose only timestamp is the restart draws nothing until it actually changes. A sensor honestly reporting motion at boot keeps its pulse.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="relitem">
+      <div class="relhead">
         <span class="relver">v0.38.40</span>
         <span class="pill stable">Stable</span>
         <span class="reldate">14 September 2026</span>
