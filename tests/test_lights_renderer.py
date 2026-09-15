@@ -2164,6 +2164,59 @@ def test_temperature_readout_shows_digits_only_when_placed_and_fresh(tmp_path):
     assert out["freshUnplacedShowsCode"], "an UNPLACED reading must fall back to its code even when fresh"
 
 
+def test_temperature_readout_is_tinted_warm_at_or_above_20_and_cool_below(tmp_path):
+    """Garry, 2026-09-14: "Temp should have a slight red tinge if over or at
+    20 deg, blue if under 20 in the mapping, lights map". The tint is a
+    translucent wash over the marker body plus a pastel of the same hue on
+    the digits, and it rides ONLY a live readout — the same placed+fresh gate
+    the digits use — so a stale sensor stays plain. 20 exactly is warm ("at
+    20"); 19.9 is cool."""
+    NOW = 2_000_000_000_000
+    H = 3_600_000
+    model = {
+        "room_geometry_m": {"Hall": {"type": "poly", "floor_id": "main", "points_m": [[0, 0], [12, 0], [12, 4], [0, 4]]}},
+        "light_positions_m": {
+            "sensor.at20":   {"x_m": 1.0, "y_m": 2.0, "floor_id": "main"},
+            "sensor.cool":   {"x_m": 4.0, "y_m": 2.0, "floor_id": "main"},
+            "sensor.stale":  {"x_m": 7.0, "y_m": 2.0, "floor_id": "main"},
+        },
+    }
+    import datetime
+    iso = lambda ms: datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.timezone.utc).isoformat()
+    lbe = {
+        "sensor.at20":  {"entity_id": "sensor.at20",  "state": "on", "code": "T01", "shape": "tempreadout", "isTemp": True, "temperature": 20,   "last_changed": iso(NOW - 5 * 60_000)},
+        "sensor.cool":  {"entity_id": "sensor.cool",  "state": "on", "code": "T02", "shape": "tempreadout", "isTemp": True, "temperature": 19.9, "last_changed": iso(NOW - 5 * 60_000)},
+        # Hot but STALE — must show neither digits nor any tint.
+        "sensor.stale": {"entity_id": "sensor.stale", "state": "on", "code": "T03", "shape": "tempreadout", "isTemp": True, "temperature": 31,   "last_changed": iso(NOW - 2 * H)},
+    }
+    out = _run_js(tmp_path, (
+        "import * as M from './iso_lights.mjs';\n"
+        f"const MODEL={json.dumps(model)};\n"
+        f"const LBE={json.dumps(lbe)};\n"
+        "const FLOORS=[{id:'main',name:'Main',level:0}];\n"
+        f"const svg=M.buildIsoSVG(MODEL,{{}},new Set(),null,150,0,LBE,false,FLOORS,{{nowMs:{NOW}}});\n"
+        "const count=(re)=>(svg.match(re)||[]).length;\n"
+        "const out={\n"
+        "  warmDigits: /fill=\"#fca5a5\"[^>]*>20</.test(svg),\n"
+        "  coolDigits: /fill=\"#93c5fd\"[^>]*>19.9</.test(svg),\n"
+        "  warmWash: count(/fill=\"#ef4444\" fill-opacity=\"0.30\"/g),\n"
+        "  coolWash: count(/fill=\"#3b82f6\" fill-opacity=\"0.30\"/g),\n"
+        "  staleUntinted: />T03</.test(svg) && !/>31</.test(svg),\n"
+        "};\n"
+        "console.log(JSON.stringify(out));\n"
+    ))
+    assert out["warmDigits"], "20 exactly is 'at 20' — warm (red) digits"
+    assert out["coolDigits"], "19.9 is under 20 — cool (blue) digits"
+    # One wash layer per live sensor, but a wash is drawn through the shape's
+    # own primitives (a thermometer is stem + bulb), so count per hue rather
+    # than pin a number: warm and cool must match each other and be non-zero.
+    # The stale sensor (31°, would be warm) contributes nothing — a wash on
+    # it would break the warm == cool equality.
+    assert out["warmWash"] > 0 and out["warmWash"] == out["coolWash"], (
+        f"one warm and one cool body wash expected, nothing on the stale sensor: {out}")
+    assert out["staleUntinted"], "a stale reading shows its code and no number"
+
+
 def test_use_surface_ergonomics_opts(tmp_path):
     """The ergonomics opts buildIsoSVG grew for the sidebar/preview use
     surface: codeChip splits the tap target into its own data-role="code"
