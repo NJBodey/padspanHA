@@ -2289,6 +2289,70 @@ def test_motion_sensors_read_quiet_after_a_restart_until_they_actually_change(tm
     assert legacy["bootOff"]["pulse"] or legacy["bootOff"]["ring"], f"without haStartedMs nothing changes: {legacy}"
 
 
+def test_poor_air_draws_faded_bars_rising_through_the_room(tmp_path):
+    """Garry, 2026-09-14: "air quality sensors. When placed in a room, and in
+    poor state, make a very faded set of bars move from the bottom of the
+    room to the top. Make it subtle but very noticable. Have it start at
+    blue, and move thru to green, same as motion depending on how bad the
+    air quality is." The bars appear ONLY for a placed sensor whose position
+    falls inside a room and whose reading is past "good" — clipped to that
+    room's polygon (so the clips must exist on a plain working map), hue
+    stepped through the motion colour stops by badness (1450 ppm CO₂ is
+    0.38 → green; 4000 ppm is 0.9 → red), the group translating upward one
+    bar-gap per cycle. Good air, an unplaced sensor, and a sensor placed
+    outside every room draw nothing."""
+    model = {
+        "room_geometry_m": {
+            "Hall": {"type": "poly", "floor_id": "main", "points_m": [[0, 0], [8, 0], [8, 4], [0, 4]]},
+            "Den":  {"type": "poly", "floor_id": "main", "points_m": [[10, 0], [16, 0], [16, 4], [10, 4]]},
+        },
+        "light_positions_m": {
+            "sensor.co2_poor":    {"x_m": 2.0,  "y_m": 2.0, "floor_id": "main"},   # in Hall, poor
+            "sensor.co2_bad":     {"x_m": 12.0, "y_m": 2.0, "floor_id": "main"},   # in Den, very bad
+            "sensor.co2_good":    {"x_m": 6.0,  "y_m": 2.0, "floor_id": "main"},   # in Hall, good
+            "sensor.co2_outside": {"x_m": 30.0, "y_m": 30.0, "floor_id": "main"},  # placed, no room
+        },
+    }
+    def aq(eid, code, ppm):
+        return {"entity_id": eid, "state": str(ppm), "code": code, "shape": "airquality", "isAir": True,
+                "device_class": "carbon_dioxide", "air_value": ppm, "air_unit": "ppm"}
+    lbe = {
+        "sensor.co2_poor":     aq("sensor.co2_poor",     "Q01", 1450),
+        "sensor.co2_bad":      aq("sensor.co2_bad",      "Q02", 4000),
+        "sensor.co2_good":     aq("sensor.co2_good",     "Q03", 600),
+        "sensor.co2_outside":  aq("sensor.co2_outside",  "Q04", 2500),
+        "sensor.co2_unplaced": aq("sensor.co2_unplaced", "Q05", 2500),   # auto-clustered in Hall
+    }
+    by_room = {"Hall": [lbe["sensor.co2_unplaced"]]}
+    out = _run_js(tmp_path, (
+        "import * as M from './iso_lights.mjs';\n"
+        f"const MODEL={json.dumps(model)};\n"
+        f"const LBE={json.dumps(lbe)};\n"
+        f"const BYROOM={json.dumps(by_room)};\n"
+        "const FLOORS=[{id:'main',name:'Main',level:0}];\n"
+        "const svg=M.buildIsoSVG(MODEL,BYROOM,new Set(),null,150,0,LBE,false,FLOORS,{});\n"
+        "const grp=(eid)=>{const m=new RegExp('<g class=\"lair\" data-eid=\"'+eid.replace(/\\./g,'\\\\.')+'\"[^>]*>').exec(svg); return m?m[0]:null;};\n"
+        "const hue=(g)=>{const m=/hsl\\((\\d+),/.exec(g||''); return m?parseInt(m[1],10):null;};\n"
+        "console.log(JSON.stringify({\n"
+        "  groups:(svg.match(/<g class=\"lair\"/g)||[]).length,\n"
+        "  poor:grp('sensor.co2_poor'), poorHue:hue(grp('sensor.co2_poor')),\n"
+        "  bad:grp('sensor.co2_bad'), badHue:hue(grp('sensor.co2_bad')),\n"
+        "  good:grp('sensor.co2_good'), outside:grp('sensor.co2_outside'), unplaced:grp('sensor.co2_unplaced'),\n"
+        "  clips:(svg.match(/<clipPath id=\"psclip_/g)||[]).length,\n"
+        "  rises:/<animateTransform attributeName=\"transform\" type=\"translate\" from=\"0 0\" to=\"0 -[\\d.]+\"/.test(svg),\n"
+        "  markerGlyph:/data-eid=\"sensor\\.co2_poor\"/.test(svg),\n"
+        "}));\n"
+    ))
+    assert out["groups"] == 2, f"exactly the two poor-air rooms get bars: {out}"
+    assert out["poor"] and 'clip-path="url(#psclip_' in out["poor"] and 'pointer-events="none"' in out["poor"], out["poor"]
+    assert out["poorHue"] == 120, f"1450 ppm is 0.38 bad — the motion GREEN step: {out}"
+    assert out["badHue"] == 0, f"4000 ppm is 0.9 bad — the motion RED step: {out}"
+    assert out["good"] is None and out["outside"] is None and out["unplaced"] is None, out
+    assert out["clips"] == 2, f"the room clips must be emitted on the plain working map when bars need them: {out}"
+    assert out["rises"], "the bars must translate upward, looping"
+    assert out["markerGlyph"], "the sensor's own marker is still drawn"
+
+
 def test_floor_slabs_never_take_a_click_but_stay_findable_by_geometry(tmp_path):
     """Garry, 2026-09-14: "all devices [placed outside a room, on a real
     floor] are not selectable". Root cause found live on four real markers:

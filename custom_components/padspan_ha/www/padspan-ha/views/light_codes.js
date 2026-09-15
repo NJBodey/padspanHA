@@ -81,7 +81,77 @@ export function isDoorSensor(l) {
 // ceiling map, admitted by gatherLights the same way motion is (by device
 // class, past the domain gate), so the domain prefix is sufficient here too.
 export function isTempSensor(l) {
-  return String(l.entity_id || "").startsWith("sensor.");
+  // By device_class, not the bare domain, since 2026-09-14: air-quality
+  // sensors are sensor.* too (below), so "any sensor.* is a thermometer"
+  // stopped being true the moment a second sensor class was admitted.
+  return String(l.entity_id || "").startsWith("sensor.")
+    && (l.device_class === "temperature" || l.device_class == null);
+}
+
+// ── Air quality ──────────────────────────────────────────────────────────────
+// Garry, 2026-09-14: "next device to add in lights, air quality sensors.
+// When placed in a room, and in poor state, make a very faded set of bars
+// move from the bottom of the room to the top. Make it subtle but very
+// noticable. Have it start at blue, and move thru to green, same as motion
+// depending on how bad the air quality is." A FOURTH read-only sensor
+// class on the ceiling map: sensor.* entities whose device_class is one of
+// HA's air-quality classes. Q-series codes.
+export const AIR_QUALITY_CLASSES = [
+  "aqi", "pm25", "pm10", "pm1",
+  "volatile_organic_compounds", "volatile_organic_compounds_parts",
+  "carbon_dioxide", "carbon_monoxide",
+  "nitrogen_dioxide", "ozone", "sulphur_dioxide",
+];
+export function isAirQualitySensor(l) {
+  return String(l.entity_id || "").startsWith("sensor.")
+    && AIR_QUALITY_CLASSES.includes(l.device_class);
+}
+export const AIR_BORDER = "#34d399";
+
+// How bad the air is, 0 (good — nothing drawn) to 1 (hazardous), from the
+// reading and its class. Breakpoints are the usual public scales in the
+// units HA reports these classes in: US EPA AQI bands; EPA PM2.5 / PM10
+// µg/m³ bands; CO₂ ppm by the common indoor-air guidance (800 fresh,
+// 1000 acceptable, 1500 stuffy, 2000+ bad); CO ppm (EPA 8-hour 9 ppm);
+// VOC µg/m³ (German UBA classes) and VOC ppb for the "_parts" class; NO₂,
+// O₃, SO₂ µg/m³ (WHO/EU limit values). Piecewise-linear between points;
+// at or under the first point is 0. NaN for a non-numeric reading or an
+// unknown class — callers draw nothing for NaN.
+const _AQ_BANDS = {
+  aqi:                              [[50, 0], [100, .2], [150, .4], [200, .6], [300, .8], [500, 1]],
+  pm25:                             [[12, 0], [35.4, .2], [55.4, .4], [150.4, .6], [250.4, .8], [500, 1]],
+  pm1:                              [[12, 0], [35.4, .2], [55.4, .4], [150.4, .6], [250.4, .8], [500, 1]],
+  pm10:                             [[54, 0], [154, .2], [254, .4], [354, .6], [424, .8], [604, 1]],
+  carbon_dioxide:                   [[800, 0], [1000, .2], [1500, .4], [2000, .6], [3000, .8], [5000, 1]],
+  carbon_monoxide:                  [[9, 0], [35, .4], [100, .7], [200, 1]],
+  volatile_organic_compounds:       [[220, 0], [660, .3], [2200, .6], [5500, .8], [11000, 1]],
+  volatile_organic_compounds_parts: [[250, 0], [500, .3], [1000, .6], [3000, .8], [10000, 1]],
+  nitrogen_dioxide:                 [[40, 0], [100, .3], [200, .6], [400, 1]],
+  ozone:                            [[100, 0], [180, .5], [240, 1]],
+  sulphur_dioxide:                  [[100, 0], [350, .5], [500, 1]],
+};
+export function airQualityBadness(l) {
+  const bands = _AQ_BANDS[l && l.device_class];
+  // null/undefined is "no reading", not zero — Number(null) is 0, which
+  // would read an unavailable sensor as Good.
+  const v = (l && l.air_value != null) ? Number(l.air_value) : NaN;
+  if (!bands || !Number.isFinite(v)) return NaN;
+  if (v <= bands[0][0]) return 0;
+  for (let i = 1; i < bands.length; i++) {
+    const [x0, b0] = bands[i - 1], [x1, b1] = bands[i];
+    if (v <= x1) return b0 + (b1 - b0) * (v - x0) / (x1 - x0);
+  }
+  return 1;
+}
+// The word for a badness, for the index and room sheet.
+export function airQualityWord(badness) {
+  if (!Number.isFinite(badness)) return "—";
+  if (badness <= 0) return "Good";
+  if (badness < .2) return "Moderate";
+  if (badness < .4) return "Poor";
+  if (badness < .6) return "Bad";
+  if (badness < .8) return "Very bad";
+  return "Hazardous";
 }
 
 // A lock.* entity riding the lights pipeline (gap #8, best-in-class
@@ -136,7 +206,8 @@ export function healthOf(l, nowMs) {
     }
     return { healthy: true, reason: "" };
   }
-  if (l.isTemp) {
+  // A temperature or air-quality sensor is healthy while it keeps reporting.
+  if (l.isTemp || l.isAir) {
     const updated = l.last_changed ? Date.parse(l.last_changed) : NaN;
     if (!Number.isFinite(updated)) return { healthy: false, reason: "No reading timestamp" };
     if ((now - updated) > TEMP_FRESH_MS) {
@@ -222,6 +293,7 @@ export const LIGHT_SHAPES = [
   ["perimeter", "Room perimeter / cove"],
   ["motion",    "Motion sensor"],
   ["tempreadout", "Temperature readout"],
+  ["airquality", "Air quality sensor"],
   ["lock",      "Door lock"],
   ["door",      "Door/window sensor"],
 ];
@@ -252,6 +324,7 @@ export function deriveLightShape(l) {
   if (isFan(l)) return "fan";
   if (isMotionSensor(l)) return "motion";
   if (isDoorSensor(l)) return "door";
+  if (isAirQualitySensor(l)) return "airquality";
   if (isTempSensor(l)) return "tempreadout";
   if (isLock(l)) return "lock";
   // A fan exposed as a light entity is not a light at all — worth seeing.
@@ -288,7 +361,7 @@ export function resolveLightShape(l, overrides) {
 // Letters reserved for a class series, skipped as the generic series counts
 // past them — precomputed once so another reserved letter is a one-line
 // change here, not new arithmetic.
-const _SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(c => c !== "D" && c !== "F" && c !== "L" && c !== "M" && c !== "P" && c !== "T" && c !== "W");
+const _SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(c => c !== "D" && c !== "F" && c !== "L" && c !== "M" && c !== "P" && c !== "Q" && c !== "T" && c !== "W");
 
 // Mutates each light in place: sets l.code, l.isWled, l.isPartition,
 // l.isFan, l.isMotion, l.isDoor and l.isTemp. Pass EVERY entity (including
@@ -298,14 +371,15 @@ const _SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(c => c !==
 // effects reads as WLED-class — the more capable identity wins.
 export function assignLightCodes(lights) {
   const sorted = [...lights].sort((a, b) => a.entity_id.localeCompare(b.entity_id));
-  let f = 0, m = 0, w = 0, p = 0, t = 0, lk = 0, d = 0, n = 0;
+  let f = 0, m = 0, w = 0, p = 0, t = 0, lk = 0, d = 0, q = 0, n = 0;
   const seriesCode = (idx) =>
     _SERIES_LETTERS[Math.floor(idx / 99)] + String((idx % 99) + 1).padStart(2, "0");
   for (const l of sorted) {
     l.isFan = isFan(l);
     l.isMotion = isMotionSensor(l);
     l.isDoor = isDoorSensor(l);
-    l.isTemp = isTempSensor(l);
+    l.isAir = isAirQualitySensor(l);
+    l.isTemp = !l.isAir && isTempSensor(l);
     l.isLock = isLock(l);
     if (l.isFan) {
       l.isWled = false; l.isPartition = false;
@@ -316,6 +390,9 @@ export function assignLightCodes(lights) {
     } else if (l.isDoor) {
       l.isWled = false; l.isPartition = false;
       l.code = "D" + String((d++ % 99) + 1).padStart(2, "0");
+    } else if (l.isAir) {
+      l.isWled = false; l.isPartition = false;
+      l.code = "Q" + String((q++ % 99) + 1).padStart(2, "0");
     } else if (l.isTemp) {
       l.isWled = false; l.isPartition = false;
       l.code = "T" + String((t++ % 99) + 1).padStart(2, "0");

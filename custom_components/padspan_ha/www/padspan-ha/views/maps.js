@@ -3824,7 +3824,7 @@ const BRIGHT_PRO_MANUAL = [
         "heading": "Choose what to show and which floor",
         "body": "The buttons above the map are split into two groups: what to show, and, in a multi-floor home, which floor to show it on.",
         "steps": [
-          "Tap All, Lights, Strips, Fans, Motion or Temps to bring just that kind of device to the front. Everything else dims and stops responding to taps until you tap the same button again, or tap All. Only buttons for devices your house actually has appear.",
+          "Tap All, Lights, Strips, Fans, Motion, Temps or Air to bring just that kind of device to the front. Everything else dims and stops responding to taps until you tap the same button again, or tap All. Only buttons for devices your house actually has appear.",
           "On a home with more than one floor, tap a floor's name to jump straight to it, or All to see every floor again. Each floor button carries a small number showing how much is on up there.",
           "Tap Find active to jump straight to whatever's on or tripped right now."
         ],
@@ -3834,7 +3834,7 @@ const BRIGHT_PRO_MANUAL = [
         "heading": "The light index",
         "body": "Below the map is a table listing every light in the house, whether or not it's placed on the map.",
         "steps": [
-          "Pick a type from the dropdown above the table — All types, Lights, Strips, Fans, Motion or Temps — to show only that kind.",
+          "Pick a type from the dropdown above the table — All types, Lights, Strips, Fans, Motion, Temps or Air — to show only that kind.",
           "Click a column heading — Code, Light, Room or State — to sort by it. Click the same heading again to reverse the order, and a third click puts the list back in its normal order."
         ],
         "notes": [
@@ -3843,7 +3843,7 @@ const BRIGHT_PRO_MANUAL = [
       },
       {
         "heading": "Motion and temperature aren't switches",
-        "body": "Motion and temperature tiles are indicators, not switches — they show you what's happening rather than let you change it. Tap a motion tile and it opens a 7-day activity history instead — how many hours it's tripped, day by day. Tap a temperature tile and the panel tells you it's read-only; there's nothing to switch.",
+        "body": "Motion, temperature and air-quality tiles are indicators, not switches — they show you what's happening rather than let you change it. Tap a motion tile and it opens a 7-day activity history instead — how many hours it's tripped, day by day. Tap a temperature tile and the panel tells you it's read-only; there's nothing to switch.",
         "steps": [],
         "notes": [
           "Some sensors report both motion and presence for the same spot — common on radar/mmWave hardware. When PadSpan can match them to the same physical sensor, it shows one tile instead of two."
@@ -4033,7 +4033,7 @@ const BRIGHT_PRO_MANUAL = [
         "heading": "Class chips and floor tabs",
         "body": "",
         "steps": [
-          "Above the map, tap a class chip — All, Lights, Strips, Fans, Motion or Temps — to isolate that class. Its count shows how many of that class are on the map; everything else dims and stops responding to taps.",
+          "Above the map, tap a class chip — All, Lights, Strips, Fans, Motion, Temps or Air — to isolate that class. Its count shows how many of that class are on the map; everything else dims and stops responding to taps.",
           "Tap the same chip again, or tap All, to bring everything back.",
           "On a house with more than one storey, floor tabs sit next to the chips: All, then one tab per floor. Each floor's tab carries a dot showing how many of its devices are on, and switches to a motion dot when something up there is tripped.",
           "Tap a floor's tab to work on just that storey — its own zoom and scroll position come back the way you left them.",
@@ -4046,7 +4046,7 @@ const BRIGHT_PRO_MANUAL = [
         "body": "Marker outlines use the same colours on the map and in the light list. Purple is a WLED or other effect-capable strip. Blue is an ESPHome partition — one physical strip split into several zones, each with its own colour. Green is a fan; tap its code, or press and hold, to open its controls. Depending on the fan, those controls can include speed, presets, oscillation and direction.\n\nMotion sensors are also outlined in blue, with a pulsing ring underneath that shows how long it has been since the sensor last changed state — whether it is currently tripped or has gone quiet: blue for the first five minutes, violet at five minutes, magenta at 20, red at 40, orange at 65, yellow at 90, and green from two hours until the ring disappears at six hours. A sensor that stays tripped for a long time sweeps through the same stages a quiet one does — it is one clock either way, so two sensors with different hardware hold-times still read the same way at the same elapsed time. Past six hours the ring disappears even if the sensor is still reporting tripped.\n\nTemperature sensors are outlined in orange. A placed sensor shows its reading as large digits while that reading is less than an hour old. If the reading is older, or the sensor has not been placed, the marker shows its code instead.",
         "steps": [],
         "notes": [
-          "Motion and temperature sensors are read-only on the map — there's nothing to tap to switch them."
+          "Motion, temperature and air-quality sensors are read-only on the map — there's nothing to tap to switch them. A placed air-quality sensor whose room's air is past good draws a faint stream of bars rising through that room, coloured on the motion scale by how bad it is — blue just past good, through green, to magenta at hazardous."
         ]
       }
     ]
@@ -8196,7 +8196,7 @@ function _lightsTourSteps(paid){
       body: "Click a light — on the map or in the list — to select it. A panel opens underneath with Shape, size and rotation. Pick the glyph that matches the real fixture, or leave it on Auto for PadSpan's own guess.",
       find: (wrap) => _lightsTourFindTable(wrap) },
     { title: "Fans, motion, temperature — and WLED",
-      body: "The chips above the map isolate one kind of device at a time — Lights, Strips, Fans, Motion, Temps. A strip with effects (WLED or similar) gets its own colour and effect controls: hold it, on the map or in the sidebar, to open them.",
+      body: "The chips above the map isolate one kind of device at a time — Lights, Strips, Fans, Motion, Temps, Air. A strip with effects (WLED or similar) gets its own colour and effect controls: hold it, on the map or in the sidebar, to open them.",
       find: (wrap) => wrap.querySelector(".lv-layerbar") },
   ];
   if (paid) {
@@ -8492,7 +8492,7 @@ function _lightsTab(ctx, maps, active) {
     // is a temperature sensor.*.
     const domain = String(eid).split(".")[0];
     if (domain === "binary_sensor") { ctx.toast("Sensors are read-only"); return; }
-    if (domain === "sensor") { ctx.toast("Temperature sensors are read-only"); return; }
+    if (domain === "sensor") { ctx.toast("Temperature and air quality sensors are read-only"); return; }
     // The EFFECTIVE state, not the raw HA one (Garry, 2026-09-11: a second
     // tap inside the same optimistic window re-decided from state that
     // hadn't caught up yet, so it silently repeated the first command

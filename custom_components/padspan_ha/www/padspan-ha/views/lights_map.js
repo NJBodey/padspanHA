@@ -15,7 +15,8 @@ const { buildIsoSVG, shapeSvg, fabricFrame, sampleSceneField, pointInPolygon, of
         lightClassOf, SHOWCASE_THEMES, AUTOMORPH_STYLE_LABELS } =
   await import(`./iso_lights.js${new URL(import.meta.url).search}`);
 const { assignLightCodes, resolveLightShape, LIGHT_SHAPES, LIGHT_TYPE_OVERRIDES,
-        WLED_BORDER, PARTITION_BORDER, FAN_BORDER, MOTION_BORDER, TEMP_BORDER, LOCK_BORDER, DOOR_BORDER, healthOf } =
+        WLED_BORDER, PARTITION_BORDER, FAN_BORDER, MOTION_BORDER, TEMP_BORDER, LOCK_BORDER, DOOR_BORDER, healthOf,
+        AIR_QUALITY_CLASSES, AIR_BORDER, airQualityBadness, airQualityWord } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 const { tierAtLeast } =
   await import(`./editions.js${new URL(import.meta.url).search}`);
@@ -140,7 +141,7 @@ export function effectiveState(eid, reported, now = Date.now()){
 // ── Device classes on the map ────────────────────────────────────────────────
 // The layer chips: the map keeps every class in view and DIMS the others,
 // because a fan's place on the ceiling is context for the light beside it.
-export const LIGHT_CLASSES = [["all","All"],["light","Lights"],["strip","Strips"],["fan","Fans"],["motion","Motion"],["temp","Temps"],["lock","Locks"],["door","Doors/Windows"]];
+export const LIGHT_CLASSES = [["all","All"],["light","Lights"],["strip","Strips"],["fan","Fans"],["motion","Motion"],["temp","Temps"],["air","Air"],["lock","Locks"],["door","Doors/Windows"]];
 
 // Automorph's style dropdown vocabulary — derived from AUTOMORPH_STYLE_LABELS
 // itself (iso_lights.js) rather than a hand-copied list. A style added there
@@ -156,6 +157,13 @@ export const AUTOMORPH_STYLES = Object.entries(AUTOMORPH_STYLE_LABELS);
 export const SHOWCASE_THEME_OPTIONS = Object.entries(SHOWCASE_THEMES).map(([key, t]) => [key, t.label]);
 export { lightClassOf };
 export function classMatches(l, cls){ return !cls || cls === "all" || lightClassOf(l) === cls; }
+
+// The index/room-sheet text for an air-quality reading: "1450 ppm · Poor".
+export function airQualityLabel(l){
+  if (!Number.isFinite(l.air_value)) return "—";
+  const v = Math.abs(l.air_value) >= 100 ? Math.round(l.air_value) : Math.round(l.air_value * 10) / 10;
+  return `${v}${l.air_unit ? " " + l.air_unit : ""} · ${airQualityWord(airQualityBadness(l))}`;
+}
 
 // ── Room and floor aggregates ────────────────────────────────────────────────
 // What a room sheet says: lights and fans counted SEPARATELY (so "all off"
@@ -680,13 +688,16 @@ export function openAggregateSheet(api, { title, sub, items, actions }){
   for (const l of items) {
     const on = l.state === "on";
     const row = mk("div", _S.row);
-    const col = l.isWled ? WLED_BORDER : (l.isPartition ? PARTITION_BORDER : (l.isFan ? FAN_BORDER : (l.isMotion ? MOTION_BORDER : (l.isTemp ? TEMP_BORDER : (l.isDoor ? DOOR_BORDER : "#52b788")))));
+    const col = l.isWled ? WLED_BORDER : (l.isPartition ? PARTITION_BORDER : (l.isFan ? FAN_BORDER : (l.isMotion ? MOTION_BORDER : (l.isTemp ? TEMP_BORDER : (l.isAir ? AIR_BORDER : (l.isDoor ? DOOR_BORDER : "#52b788"))))));
     row.appendChild(mk("span", _S.code + `;color:${col}`, l.code));
     row.appendChild(mk("span", _S.name, l.friendly_name));
     if (l.isMotion) {
       row.appendChild(mk("span", _S.state(on), on ? "MOTION" : "clear"));
     } else if (l.isTemp) {
       row.appendChild(mk("span", _S.state(false), Number.isFinite(l.temperature) ? `${l.temperature}°` : "—"));
+    } else if (l.isAir) {
+      // Read-only, like temp: the reading, its unit and the band word.
+      row.appendChild(mk("span", _S.state(false), airQualityLabel(l)));
     } else if (l.isDoor) {
       // Read-only, same as motion/temp above — a door/window sensor is not
       // a switch, and the generic On/Off button below would fire a toggle
@@ -1301,9 +1312,13 @@ export function ensureLightsRegistry(store, hass, areas, onLoaded){
           // touched could never cluster onto the map or be placed at all —
           // found live, 2026-09-03 (Garry: "don't see any way to move the
           // temp in mapping, lights").
-          const isTempSensor = e.entity_id.startsWith("sensor.")
-            && hass.states[e.entity_id]?.attributes?.device_class === "temperature";
-          if (!/^(light|fan|binary_sensor)\./.test(e.entity_id) && !isTempSensor) continue;
+          // Air-quality sensors (2026-09-14) ride the same admission — the
+          // same class set gatherLights uses — or "Assign room…" would save
+          // in HA and never move the Q-tile, the 2026-09-03 bug all over again.
+          const _dc = hass.states[e.entity_id]?.attributes?.device_class;
+          const isMapSensor = e.entity_id.startsWith("sensor.")
+            && (_dc === "temperature" || AIR_QUALITY_CLASSES.includes(_dc));
+          if (!/^(light|fan|binary_sensor)\./.test(e.entity_id) && !isMapSensor) continue;
           const aid = e.area_id || devAreaId[e.device_id] || null;
           areaMap[e.entity_id] = aid ? (areaIdToName[aid] || null) : null;
           // The platform that CREATED the entity — "partition" for an
@@ -1405,6 +1420,11 @@ export function gatherLights(states, areaMap, shapeOverrides, tier, platformMap,
       // like a motion sensor" (Garry). sensor.* is a domain nothing else
       // here admits, so this can never collide with a light/fan/binary_sensor.
       || (eid.startsWith("sensor.") && states[eid].attributes?.device_class === "temperature")
+      // Air quality (Garry, 2026-09-14): the FOURTH read-only sensor class —
+      // sensor.* by HA's air-quality device classes (AQI, PM, CO₂, CO, VOC,
+      // NO₂, O₃, SO₂). Its job on the map: a faded stream of bars rising
+      // through its room while the air is poor.
+      || (eid.startsWith("sensor.") && AIR_QUALITY_CLASSES.includes(states[eid].attributes?.device_class))
       // lock.* — gap #8, best-in-class roadmap: the first domain this
       // pipeline generalized to beyond light/fan/binary_sensor/sensor.
       // Whole domain, no device_class gate needed (every lock entity is
@@ -1449,8 +1469,14 @@ export function gatherLights(states, areaMap, shapeOverrides, tier, platformMap,
       // The reading itself, rounded — "inside is simply the temperature, 3
       // digit, and larger". Only sensor.* entities carry one; everything
       // else is null, same gating convention as the fan card's own fields.
-      temperature:   eid.startsWith("sensor.") && Number.isFinite(Number(states[eid].state))
+      temperature:   eid.startsWith("sensor.") && states[eid].attributes?.device_class === "temperature"
+                       && Number.isFinite(Number(states[eid].state))
                        ? Math.round(Number(states[eid].state)) : null,
+      // An air-quality reading, unrounded (airQualityBadness bands it), and
+      // its unit for the index — only for the air-quality classes.
+      air_value:     eid.startsWith("sensor.") && AIR_QUALITY_CLASSES.includes(states[eid].attributes?.device_class)
+                       && Number.isFinite(Number(states[eid].state)) ? Number(states[eid].state) : null,
+      air_unit:      eid.startsWith("sensor.") ? (states[eid].attributes?.unit_of_measurement || "") : "",
       // The effect list is what makes a light WLED-class (W-series code,
       // purple border, effects dialog). Free tier: every light is a light.
       effect_list:   paid && Array.isArray(states[eid].attributes?.effect_list) ? states[eid].attributes.effect_list : null,
@@ -2321,6 +2347,7 @@ export function buildLightsTable(host, lights){
     // reading numerically (so 105° sorts above 68°, not alphabetically),
     // everything else by its actual on/off.
     ["state", "State", (l) => l.isTemp ? (Number.isFinite(l.temperature) ? l.temperature : -Infinity)
+      : l.isAir ? (Number.isFinite(l.air_value) ? l.air_value : -Infinity)
       : l.isLock ? (l.state === "locked" ? 1 : 0) : (l.state === "on" ? 1 : 0)],
   ];
   const th = (key, label, extraStyle) => {
@@ -2398,8 +2425,9 @@ export function buildLightsTable(host, lights){
           : (l.isFan ? FAN_BORDER
           : (l.isMotion ? MOTION_BORDER
           : (l.isTemp ? TEMP_BORDER
+          : (l.isAir ? AIR_BORDER
           : (l.isLock ? LOCK_BORDER
-          : (l.isDoor ? DOOR_BORDER : "#52b788"))))));
+          : (l.isDoor ? DOOR_BORDER : "#52b788")))))));
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("width", "15"); svg.setAttribute("height", "15");
         svg.setAttribute("viewBox", "0 0 15 15");
@@ -2446,6 +2474,8 @@ export function buildLightsTable(host, lights){
       el("td", { class: "muted", style: "font-size:11px" }, l.brand || "—"),
       el("td", {}, l.isTemp
         ? el("span", { class: "lv-state off" }, Number.isFinite(l.temperature) ? `${l.temperature}°` : "—")
+        : l.isAir
+        ? el("span", { class: "lv-state off", title: "Air quality — read-only" }, airQualityLabel(l))
         : l.isLock
         ? el("span", { class: `lv-state ${l.state === "jammed" ? "off" : (on ? "on" : "off")}` },
              l.state === "jammed" ? "JAMMED" : (on ? "LOCKED" : "UNLOCKED"))
@@ -2483,7 +2513,7 @@ export function buildLightsTable(host, lights){
       el("td", { style: "text-align:center;white-space:nowrap" }, [
         // The visible way to the controls (sidebar): a "⋯" that opens the
         // card — the same card the hold opens, offered in plain sight.
-        ...(host.onRowMore && !l.isMotion && !l.isTemp ? [el("button", {
+        ...(host.onRowMore && !l.isMotion && !l.isTemp && !l.isAir ? [el("button", {
           class: "lv-act", title: "Controls", style: "margin-right:6px",
           onclick: (e) => { e.stopPropagation(); host.onRowMore(l); },
         }, "⋯")] : []),

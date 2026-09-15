@@ -647,11 +647,16 @@ const REG = [
   {entity_id: "light.lamp", area_id: "bedroom", device_id: null, platform: "hue"},
   {entity_id: "sensor.temp1", area_id: "bedroom", device_id: null, platform: "zha"},
   {entity_id: "sensor.humidity1", area_id: "bedroom", device_id: null, platform: "zha"},
+  // Air quality (2026-09-14): the same admission as gatherLights, or a
+  // Q-tile's "Assign room…" saves in HA and never moves it — the 2026-09-03
+  // bug this test exists for, for the next sensor class.
+  {entity_id: "sensor.co2_1", area_id: "bedroom", device_id: null, platform: "mqtt"},
 ];
 const STATES = {
   "light.lamp": {state: "on", attributes: {friendly_name: "Lamp"}},
   "sensor.temp1": {state: "68", attributes: {device_class: "temperature"}},
   "sensor.humidity1": {state: "44", attributes: {device_class: "humidity"}},
+  "sensor.co2_1": {state: "900", attributes: {device_class: "carbon_dioxide", unit_of_measurement: "ppm"}},
 };
 const hass = {
   states: STATES,
@@ -678,6 +683,8 @@ console.log(JSON.stringify({loaded, areaMap: store.reg ? store.reg.areaMap : nul
         f"a temperature sensor's own room pick must resolve here — this is the ONLY place gatherLights reads area_name from: {areaMap}"
     assert "sensor.humidity1" not in areaMap, \
         f"a non-temperature sensor.* must stay excluded — the fix is scoped to gatherLights' own admission rule: {areaMap}"
+    assert areaMap["sensor.co2_1"] == "Bedroom", \
+        f"an air-quality sensor's room pick must resolve here too, same admission as gatherLights: {areaMap}"
 
 
 def test_ensure_lights_registry_resolves_ip_from_configuration_url(tmp_path):
@@ -1038,20 +1045,32 @@ const STATES = {
   "sensor.living_room_humidity": {state: "44", last_updated: "2026-01-01T00:00:00.000Z",
                                    attributes: {friendly_name: "Living Room Humidity", device_class: "humidity"}},
   "light.lamp": {state: "off", attributes: {friendly_name: "Lamp", supported_color_modes: ["onoff"]}},
+  // Air quality (Garry, 2026-09-14): a CO2 sensor is a plain sensor.* too —
+  // admitted by its device_class, as its OWN class (Q-series), never as a
+  // thermometer: isTempSensor used to be "any sensor.*".
+  "sensor.living_room_co2": {state: "1450", last_updated: "2026-01-01T00:00:00.000Z",
+                              attributes: {friendly_name: "Living Room CO2", device_class: "carbon_dioxide", unit_of_measurement: "ppm"}},
 };
 const lights = LM.gatherLights(STATES, AREA, {}, "pro", {}, {}, {});
 const by = Object.fromEntries(lights.map(l => [l.entity_id, l]));
+const q = by["sensor.living_room_co2"];
 console.log(JSON.stringify({
   ids: lights.map(l => l.entity_id).sort(),
   temp: by["sensor.living_room_temp"] && {code: by["sensor.living_room_temp"].code, isTemp: by["sensor.living_room_temp"].isTemp,
     shape: by["sensor.living_room_temp"].shape, temperature: by["sensor.living_room_temp"].temperature,
     last_changed: by["sensor.living_room_temp"].last_changed, dimmable: by["sensor.living_room_temp"].dimmable},
+  air: q && {code: q.code, isAir: q.isAir, isTemp: q.isTemp, shape: q.shape, air_value: q.air_value, air_unit: q.air_unit,
+    label: LM.airQualityLabel(q)},
 }));
 """)
-    assert out["ids"] == ["light.lamp", "sensor.living_room_temp"], "a humidity sensor must not join the lights map"
+    assert out["ids"] == ["light.lamp", "sensor.living_room_co2", "sensor.living_room_temp"], "a humidity sensor must not join the lights map; a CO2 sensor must"
     t = out["temp"]
     assert t["code"] == "T01" and t["isTemp"] and t["shape"] == "tempreadout", t
     assert t["temperature"] == 72, f"71.6 must round to 72: {t}"
+    a = out["air"]
+    assert a["code"] == "Q01" and a["isAir"] and not a["isTemp"] and a["shape"] == "airquality", a
+    assert a["air_value"] == 1450 and a["air_unit"] == "ppm", a
+    assert a["label"] == "1450 ppm · Poor", a
     assert t["last_changed"] == "2026-01-01T00:00:00.000Z", "last_updated feeds the freshness gate, not an attribute"
     assert t["dimmable"] is False, "a read-only sensor must never offer the brightness card"
 
