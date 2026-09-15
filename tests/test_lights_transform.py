@@ -400,9 +400,18 @@ def test_an_outdoor_room_anchors_no_placement_path():
         assert blk.count("isOutdoorFloorId(") >= 2, (
             f"{name}: an outdoor room or prior outdoor placement still anchors the floor"
         )
-    # And the pin/tap fall through to the slab that was actually hit — not
-    # unconditionally to the lowest storey.
-    assert "dropFloorZ" in pin and 'data-role="floorslab"' in tap
+    # And the pin/tap fall through to the plate that was actually hit — by
+    # geometry (_floorZAtVb; the slabs take no pointer events, see
+    # test_lights_renderer's slab test) — not unconditionally to the lowest
+    # storey.
+    assert "dropFloorZ" in pin and "_floorZAtVb(" in tap
+    build = src[src.index("function _wireLightsBuild"):]
+    assert "_floorZAtVb(svg, v.x, v.y)" in build[:build.index("\nfunction ")], (
+        "the drop-marker pin no longer resolves its floor by plate geometry")
+    helper = src[src.index("function _floorZAtVb"):]
+    helper = helper[:helper.index("\nfunction ")]
+    assert "pointInPolygon(" in helper and 'data-role="slabtop"' in helper and "elementsFromPoint" not in helper, (
+        "_floorZAtVb must hit-test the plate by geometry, not by pointer events")
 
 
 def test_both_write_paths_pin_the_floor_to_the_room():
