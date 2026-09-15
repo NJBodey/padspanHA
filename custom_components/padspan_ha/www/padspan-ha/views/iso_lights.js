@@ -3156,7 +3156,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         `<stop offset="100%" stop-color="#000" stop-opacity="0.18"/></linearGradient>`;
     }
 
-    s+=`<g opacity="${go}"${gpe}>`;
+    s+=`<g data-role="floorslab" data-z="${z}" opacity="${go}"${gpe}>`;
     // Slab sides
     s+=`<polygon points="${pts([TR,BR,BR_b,TR_b])}" fill="${THEME.slabSideTop.fill}" fill-opacity="${THEME.slabSideTop.fillOpacity}" stroke="${THEME.slabSideTop.stroke}" stroke-width="0.7"/>`;
     s+=`<polygon points="${pts([BL,BR,BR_b,BL_b])}" fill="${THEME.slabSideFront.fill}" fill-opacity="${THEME.slabSideFront.fillOpacity}" stroke="${THEME.slabSideFront.stroke}" stroke-width="0.7"/>`;

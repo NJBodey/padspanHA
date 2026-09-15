@@ -175,13 +175,35 @@ export function roomAggregate(lights, roomName){
     all: here,
   };
 }
+// Mirrors const.OUTDOOR_FLOOR_NAMES / presence_rules.is_outdoor_floor: the
+// fabric's "__outside__" sentinel, the registry's "outside", and the plain
+// names people give a garden. An outdoor "floor" is not a storey.
+export function isOutdoorFloorId(fid){
+  const k = String(fid || "").trim().toLowerCase().replace(/\s+/g, "_");
+  return k === "__outside__" || k === "outside" || k === "outdoor" || k === "outdoors"
+      || k === "exterior" || k === "garden" || k === "yard";
+}
 // A device's floor: the room it is in (the fabric's room → floor), else the
 // floor it was placed on. A device with neither is on no floor.
+//
+// An OUTDOOR room does not anchor (Garry, 2026-09-14: devices "registered to
+// the outside level" could not be placed "on a floor, just outside a room").
+// Outdoors is not a storey and the Lights stack never draws it (fabricFrame
+// drops outdoor rooms and lights before the levels are built), so a device
+// whose only claim to a floor was "Shed" had no marker to grab and every
+// placement path wrote it straight back onto __outside__ — it could never
+// reach the map at all. Its stored placement wins instead: drop it on a real
+// floor's plate beside the room it lives outside of, and that is where it
+// draws. Never placed, it stays on the outside level exactly as before, so
+// nothing already saved moves.
 export function lightFloorId(l, model){
   const geo = (model && model.room_geometry_m) || {};
-  if (l.area_name && geo[l.area_name] && geo[l.area_name].floor_id) return String(geo[l.area_name].floor_id);
+  const g = l.area_name && geo[l.area_name];
+  const roomFid = g && g.floor_id ? String(g.floor_id) : null;
+  if (roomFid && !isOutdoorFloorId(roomFid)) return roomFid;
   const p = ((model && model.light_positions_m) || {})[l.entity_id];
-  return p && p.floor_id ? String(p.floor_id) : null;
+  if (p && p.floor_id) return String(p.floor_id);
+  return roomFid;
 }
 export function floorAggregate(lights, model, floorId){
   const here = (lights || []).filter(l => lightFloorId(l, model) === String(floorId));
