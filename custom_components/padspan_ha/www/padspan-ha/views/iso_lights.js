@@ -2915,6 +2915,31 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
   // built from motionLegendStops above so this can never become a second,
   // drifting copy of the real colours or their real timing.
   s+=`<linearGradient id="psmotionlegend" x1="0" y1="0" x2="1" y2="0">${motionLegendStops}</linearGradient>`;
+  // The air-quality index (Garry, 2026-09-14: "the index for motion at the
+  // bottom with the colors, should also add air quality to that"): the SAME
+  // hues, but by how bad rather than how long ago, so hard equal bands —
+  // moderate (blue) … hazardous (magenta) — not the motion strip's
+  // duration-weighted fades.
+  // (degSteps, not the obvious word: test_shared_rules greps the views for
+  // an inline hsl() built from a variable spelled that way — the shape a
+  // second, drifting room-colour implementation takes.)
+  // Bands laid out exactly as airHue steps them — floor(badness*6): six
+  // equal bands for the first six hues across 0..1, and magenta only AT
+  // hazardous, drawn as a terminal sliver — so the strip never promises a
+  // colour the map does not paint (the motion strip's own rule).
+  {
+    const degSteps=MOTION_COLOR_STOPS.map(st=>st[1]);
+    const n=degSteps.length, main=0.92;
+    let stops="";
+    for(let i=0;i<n;i++){
+      const c=`hsl(${degSteps[i]},75%,58%)`;
+      const a=(i<n-1) ? i/(n-1)*main : main;
+      const b=(i<n-1) ? (i+1)/(n-1)*main : 1;
+      stops+=`<stop offset="${(a*100).toFixed(1)}%" stop-color="${c}"/>`+
+             `<stop offset="${(b*100).toFixed(1)}%" stop-color="${c}"/>`;
+    }
+    s+=`<linearGradient id="psairlegend" x1="0" y1="0" x2="1" y2="0">${stops}</linearGradient>`;
+  }
   s+=`<radialGradient id="psmotion">`+
     `<stop offset="0%" stop-color="${MOTION_PULSE}" stop-opacity="0.55"/>`+
     `<stop offset="60%" stop-color="${MOTION_PULSE}" stop-opacity="0.18"/>`+
@@ -6081,6 +6106,19 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
     s+=`<text x="${lx}" y="${ly+3}" fill="#9fb0a8" font-size="10" font-weight="500">Motion</text>`;
     lx+="Motion".length*10*0.6+14;
     s+=`<rect x="${lx}" y="${ly-2}" width="120" height="1.5" rx="0.75" fill="url(#psmotionlegend)"/>`;
+    // …then "Air" and its stepped strip, same line, same hues by badness —
+    // only when the house has an air-quality sensor at all, and only if it
+    // fits: four long floor names plus both strips can pass W, and viewX1
+    // grows for room geometry only, so an overflowing strip would just be
+    // clipped.
+    const hasAir=Object.values(lightsByEid||{}).some(li=>li&&li.isAir);
+    const airW=18+"Air".length*10*0.6+14+120;
+    if(hasAir && lx+120+airW<=W-10){
+      lx+=120+18;
+      s+=`<text x="${lx}" y="${ly+3}" fill="#9fb0a8" font-size="10" font-weight="500">Air</text>`;
+      lx+="Air".length*10*0.6+14;
+      s+=`<rect x="${lx}" y="${ly-2}" width="120" height="1.5" rx="0.75" fill="url(#psairlegend)"/>`;
+    }
   }
 
   s+=`</svg>`;

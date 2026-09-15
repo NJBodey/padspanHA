@@ -3838,11 +3838,11 @@ const BRIGHT_PRO_MANUAL = [
           "Click a column heading — Code, Light, Room or State — to sort by it. Click the same heading again to reverse the order, and a third click puts the list back in its normal order."
         ],
         "notes": [
-          "State sorts off before on — click again to bring what's on to the top. For a temperature sensor it sorts by the reading itself, not just on or off."
+          "State sorts off before on — click again to bring what's on to the top. For a temperature sensor it sorts by the reading itself, and for an air-quality sensor by how bad the air is, not just on or off."
         ]
       },
       {
-        "heading": "Motion and temperature aren't switches",
+        "heading": "Motion, temperature and air quality aren't switches",
         "body": "Motion, temperature and air-quality tiles are indicators, not switches — they show you what's happening rather than let you change it. Tap a motion tile and it opens a 7-day activity history instead — how many hours it's tripped, day by day. Tap a temperature tile and the panel tells you it's read-only; there's nothing to switch.",
         "steps": [],
         "notes": [
@@ -3992,7 +3992,7 @@ const BRIGHT_PRO_MANUAL = [
         "body": "",
         "steps": [
           "Click Undo (or press Ctrl+Z) to step back through your unsaved edits one at a time; click Redo (Ctrl+Y) to step forward again.",
-          "Use the filter dropdown above the light index to show only one kind of device at a time — lights, strips, fans, motion sensors or temperature sensors.",
+          "Use the filter dropdown above the light index to show only one kind of device at a time — lights, strips, fans, motion sensors, temperature sensors or air-quality sensors.",
           "Click a column heading — Code, Light, Room or State — to sort the index by it. Click again to reverse the order; a third click returns to the underlying order, sorted by room and then by name.",
           "Click \"Hide untouched\" to show only the fixtures you've actually resized, rotated, recoloured or given a shape — useful once most of the house is placed and you just want to see what's left to style. Moving a light on its own doesn't count as touching it.",
           "Click Hide on a light's row to drop it off the map entirely — it stays listed in the index. Click Show on a hidden row to bring it back."
@@ -4026,7 +4026,7 @@ const BRIGHT_PRO_MANUAL = [
           "Leave it on Auto (derived) to go back to PadSpan's own guess."
         ],
         "notes": [
-          "Motion sensor and Temperature readout are also in the shape list, but your motion and temperature entities already draw that way on their own — you won't need to set them."
+          "Motion sensor, Temperature readout and Air quality sensor are also in the shape list, but your motion, temperature and air-quality entities already draw that way on their own — you won't need to set them."
         ]
       },
       {
@@ -9344,7 +9344,9 @@ function _lightsTab(ctx, maps, active) {
     }, `⎘ Apply look to ${selSet.size - 1} selected`));
 
     const on = l.state === "on";
-    insp.appendChild(el("button", {
+    // A read-only class (motion, door/window, temperature, air quality) has
+    // nothing to switch — the button only ever produced the read-only toast.
+    if (!(l.isMotion || l.isDoor || l.isTemp || l.isAir)) insp.appendChild(el("button", {
       class: `lv-onoff ${on ? "on" : "off"}`,
       onclick: () => toggle(l.entity_id),
     }, on ? "Turn Off" : "Turn On"));

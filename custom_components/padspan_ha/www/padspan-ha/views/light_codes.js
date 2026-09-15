@@ -100,13 +100,36 @@ export const AIR_QUALITY_CLASSES = [
   "aqi", "pm25", "pm10", "pm1",
   "volatile_organic_compounds", "volatile_organic_compounds_parts",
   "carbon_dioxide", "carbon_monoxide",
-  "nitrogen_dioxide", "ozone", "sulphur_dioxide",
+  "nitrogen_dioxide", "nitrogen_monoxide", "ozone", "sulphur_dioxide",
 ];
-export function isAirQualitySensor(l) {
-  return String(l.entity_id || "").startsWith("sensor.")
-    && AIR_QUALITY_CLASSES.includes(l.device_class);
+// Two shapes of air-quality entity: a NUMERIC reading with one of the
+// classes above, or an ENUM sensor whose id/name says "air quality" and
+// whose state is a WORD — the Zigbee2MQTT convention for a device that
+// grades its own air (Garry's bathroom outlets: sensor.invisoutlet_air_quality
+// = "moderate"; "it's not picking up the outlet air quality sensors in the
+// bathrooms"). The id/name test keeps every other enum sensor (power-on
+// behaviour, modes) out.
+const _AIR_NAME_RE = /air[_ ]?quality|\baqi\b/i;
+export function isAirQualityEntity(eid, attrs) {
+  if (!String(eid || "").startsWith("sensor.")) return false;
+  const dc = attrs && attrs.device_class;
+  if (AIR_QUALITY_CLASSES.includes(dc)) return true;
+  return dc === "enum" && _AIR_NAME_RE.test(`${eid} ${(attrs && attrs.friendly_name) || ""}`);
 }
-export const AIR_BORDER = "#34d399";
+export function isAirQualitySensor(l) {
+  return isAirQualityEntity(l.entity_id, { device_class: l.device_class, friendly_name: l.friendly_name });
+}
+// Teal — its own hue: #34d399 is the fan's, and a Q tile must not read as an F.
+export const AIR_BORDER = "#2dd4bf";
+
+// The graded words an enum air-quality sensor reports, to badness. Placed
+// on the same 0..1 scale the numeric bands use, so the bars step the motion
+// colours the same way: moderate is the first visible band (blue), poor is
+// green, unhealthy red, hazardous magenta; good/excellent draw nothing.
+const _AQ_WORDS = {
+  excellent: 0, good: 0, fair: 0.05, moderate: 0.05, poor: 0.4, very_poor: 0.6,
+  unhealthy: 0.75, severe: 0.9, hazardous: 1,
+};
 
 // How bad the air is, 0 (good — nothing drawn) to 1 (hazardous), from the
 // reading and its class. Breakpoints are the usual public scales in the
@@ -127,10 +150,17 @@ const _AQ_BANDS = {
   volatile_organic_compounds:       [[220, 0], [660, .3], [2200, .6], [5500, .8], [11000, 1]],
   volatile_organic_compounds_parts: [[250, 0], [500, .3], [1000, .6], [3000, .8], [10000, 1]],
   nitrogen_dioxide:                 [[40, 0], [100, .3], [200, .6], [400, 1]],
+  nitrogen_monoxide:                [[40, 0], [100, .3], [200, .6], [400, 1]],
   ozone:                            [[100, 0], [180, .5], [240, 1]],
   sulphur_dioxide:                  [[100, 0], [350, .5], [500, 1]],
 };
 export function airQualityBadness(l) {
+  // A graded word (enum sensor) — banded by the table above; a word the
+  // table doesn't know (unknown, unavailable) is no reading.
+  if (l && typeof l.air_level === "string" && l.air_level) {
+    const w = l.air_level.toLowerCase().replace(/[\s-]+/g, "_");
+    return Object.prototype.hasOwnProperty.call(_AQ_WORDS, w) ? _AQ_WORDS[w] : NaN;
+  }
   const bands = _AQ_BANDS[l && l.device_class];
   // null/undefined is "no reading", not zero — Number(null) is 0, which
   // would read an unavailable sensor as Good.

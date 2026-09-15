@@ -2311,17 +2311,26 @@ def test_poor_air_draws_faded_bars_rising_through_the_room(tmp_path):
             "sensor.co2_bad":     {"x_m": 12.0, "y_m": 2.0, "floor_id": "main"},   # in Den, very bad
             "sensor.co2_good":    {"x_m": 6.0,  "y_m": 2.0, "floor_id": "main"},   # in Hall, good
             "sensor.co2_outside": {"x_m": 30.0, "y_m": 30.0, "floor_id": "main"},  # placed, no room
+            "sensor.bath_air":    {"x_m": 20.0, "y_m": 2.0, "floor_id": "main"},   # in Loo, enum "poor"
+            "sensor.bath_air_ok": {"x_m": 22.0, "y_m": 2.0, "floor_id": "main"},   # in Loo, enum "good"
         },
     }
+    model["room_geometry_m"]["Loo"] = {"type": "poly", "floor_id": "main", "points_m": [[18, 0], [24, 0], [24, 4], [18, 4]]}
     def aq(eid, code, ppm):
         return {"entity_id": eid, "state": str(ppm), "code": code, "shape": "airquality", "isAir": True,
                 "device_class": "carbon_dioxide", "air_value": ppm, "air_unit": "ppm"}
+    def aq_word(eid, code, word):
+        return {"entity_id": eid, "state": word, "code": code, "shape": "airquality", "isAir": True,
+                "device_class": "enum", "air_value": None, "air_unit": "", "air_level": word}
     lbe = {
         "sensor.co2_poor":     aq("sensor.co2_poor",     "Q01", 1450),
         "sensor.co2_bad":      aq("sensor.co2_bad",      "Q02", 4000),
         "sensor.co2_good":     aq("sensor.co2_good",     "Q03", 600),
         "sensor.co2_outside":  aq("sensor.co2_outside",  "Q04", 2500),
         "sensor.co2_unplaced": aq("sensor.co2_unplaced", "Q05", 2500),   # auto-clustered in Hall
+        # The bathroom outlets' kind: a graded WORD, no number.
+        "sensor.bath_air":     aq_word("sensor.bath_air",    "Q06", "poor"),
+        "sensor.bath_air_ok":  aq_word("sensor.bath_air_ok", "Q07", "good"),
     }
     by_room = {"Hall": [lbe["sensor.co2_unplaced"]]}
     out = _run_js(tmp_path, (
@@ -2338,19 +2347,60 @@ def test_poor_air_draws_faded_bars_rising_through_the_room(tmp_path):
         "  poor:grp('sensor.co2_poor'), poorHue:hue(grp('sensor.co2_poor')),\n"
         "  bad:grp('sensor.co2_bad'), badHue:hue(grp('sensor.co2_bad')),\n"
         "  good:grp('sensor.co2_good'), outside:grp('sensor.co2_outside'), unplaced:grp('sensor.co2_unplaced'),\n"
+        "  bathPoor:grp('sensor.bath_air'), bathPoorHue:hue(grp('sensor.bath_air')), bathOk:grp('sensor.bath_air_ok'),\n"
         "  clips:(svg.match(/<clipPath id=\"psclip_/g)||[]).length,\n"
         "  rises:/<animateTransform attributeName=\"transform\" type=\"translate\" from=\"0 0\" to=\"0 -[\\d.]+\"/.test(svg),\n"
         "  markerGlyph:/data-eid=\"sensor\\.co2_poor\"/.test(svg),\n"
         "}));\n"
     ))
-    assert out["groups"] == 2, f"exactly the two poor-air rooms get bars: {out}"
+    assert out["groups"] == 3, f"exactly the three poor-air rooms get bars (two numeric, one graded word): {out}"
+    assert out["bathPoor"] and out["bathPoorHue"] == 120, f"an enum sensor grading itself 'poor' draws green bars: {out}"
+    assert out["bathOk"] is None, f"'good' draws nothing: {out}"
     assert out["poor"] and 'clip-path="url(#psclip_' in out["poor"] and 'pointer-events="none"' in out["poor"], out["poor"]
     assert out["poorHue"] == 120, f"1450 ppm is 0.38 bad — the motion GREEN step: {out}"
     assert out["badHue"] == 0, f"4000 ppm is 0.9 bad — the motion RED step: {out}"
     assert out["good"] is None and out["outside"] is None and out["unplaced"] is None, out
-    assert out["clips"] == 2, f"the room clips must be emitted on the plain working map when bars need them: {out}"
+    assert out["clips"] == 3, f"the room clips must be emitted on the plain working map when bars need them: {out}"
     assert out["rises"], "the bars must translate upward, looping"
     assert out["markerGlyph"], "the sensor's own marker is still drawn"
+
+
+def test_the_legend_line_carries_an_air_quality_colour_index_beside_motion(tmp_path):
+    """Garry, 2026-09-14: "the index for motion at the bottom with the colors,
+    should also add air quality to that". Same line as the floor index and
+    the motion strip; the SAME seven hues, but as hard equal bands (by how
+    bad, not how long ago), from the motion blue at moderate to magenta at
+    hazardous."""
+    model = {
+        "room_geometry_m": {"Hall": {"type": "poly", "floor_id": "main", "points_m": [[0, 0], [8, 0], [8, 4], [0, 4]]}},
+        "light_positions_m": {},
+    }
+    out = _run_js(tmp_path, (
+        "import * as M from './iso_lights.mjs';\n"
+        f"const MODEL={json.dumps(model)};\n"
+        "const FLOORS=[{id:'main',name:'Main',level:0}];\n"
+        # The strip is drawn only for a house that HAS an air-quality sensor.
+        "const LBE={'sensor.q':{entity_id:'sensor.q',state:'good',code:'Q01',shape:'airquality',isAir:true,device_class:'enum',air_level:'good'}};\n"
+        "const svg=M.buildIsoSVG(MODEL,{'Hall':[LBE['sensor.q']]},new Set(),null,150,0,LBE,false,FLOORS,{});\n"
+        "const bare=M.buildIsoSVG(MODEL,{},new Set(),null,150,0,{},false,FLOORS,{});\n"
+        "const grad=/<linearGradient id=\"psairlegend\"[^>]*>([^]*?)<\\/linearGradient>/.exec(svg);\n"
+        "const hues=grad ? [...grad[1].matchAll(/hsl\\((\\d+),/g)].map(m=>parseInt(m[1],10)) : [];\n"
+        "const distinct=[...new Set(hues)];\n"
+        "const motionAt=svg.indexOf('>Motion</text>'), airAt=svg.indexOf('>Air</text>');\n"
+        "const offs=grad ? [...grad[1].matchAll(/offset=\"([\\d.]+)%\"/g)].map(m=>parseFloat(m[1])) : [];\n"
+        "console.log(JSON.stringify({hasGrad:!!grad, distinct, stopCount:hues.length, airAfterMotion: motionAt>=0 && airAt>motionAt,\n"
+        "  strip:/<rect x=\"[\\d.]+\" y=\"[\\d.]+\" width=\"120\" height=\"1.5\" rx=\"0.75\" fill=\"url\\(#psairlegend\\)\"\\/>/.test(svg),\n"
+        "  bareHasStrip:/>Air<\\/text>/.test(bare), magentaStart: offs[12]}));\n"
+    ))
+    assert out["hasGrad"], "the air legend gradient is missing from the defs"
+    assert out["distinct"] == [240, 180, 120, 60, 30, 0, 300], f"the motion hues, in the motion order: {out}"
+    assert out["stopCount"] == 14, f"seven HARD bands = two stops each: {out}"
+    assert out["airAfterMotion"] and out["strip"], f"'Air' and its strip must follow Motion on the legend line: {out}"
+    # Laid out as the map steps it: six equal bands across most of the strip,
+    # magenta only as the terminal sliver (the map paints magenta only AT
+    # hazardous) — the strip never promises a colour the map does not paint.
+    assert out["magentaStart"] == 92.0, f"magenta must be the terminal sliver, not a seventh equal band: {out}"
+    assert not out["bareHasStrip"], "a house with no air-quality sensor gets no Air strip"
 
 
 def test_floor_slabs_never_take_a_click_but_stay_findable_by_geometry(tmp_path):
