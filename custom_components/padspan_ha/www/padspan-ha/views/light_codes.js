@@ -88,6 +88,17 @@ export function isTempSensor(l) {
     && (l.device_class === "temperature" || l.device_class == null);
 }
 
+// A sensor.* entity reporting device_class "humidity" — Garry, 2026-09-15:
+// "set it up like temperature". A FIFTH read-only class, admitted and
+// placed/moved/selected exactly like temperature; unlike temperature it
+// requires the EXPLICIT device_class (no null fallback) — null already
+// belongs to temperature (its historical no-device_class catch-all above),
+// and a humidity sensor is a plain sensor.* too, so it must never be
+// claimed by that fallback.
+export function isHumiditySensor(l) {
+  return String(l.entity_id || "").startsWith("sensor.") && l.device_class === "humidity";
+}
+
 // ── Air quality ──────────────────────────────────────────────────────────────
 // Garry, 2026-09-14: "next device to add in lights, air quality sensors.
 // When placed in a room, and in poor state, make a very faded set of bars
@@ -236,8 +247,8 @@ export function healthOf(l, nowMs) {
     }
     return { healthy: true, reason: "" };
   }
-  // A temperature or air-quality sensor is healthy while it keeps reporting.
-  if (l.isTemp || l.isAir) {
+  // A temperature, air-quality or humidity sensor is healthy while it keeps reporting.
+  if (l.isTemp || l.isAir || l.isHumidity) {
     const updated = l.last_changed ? Date.parse(l.last_changed) : NaN;
     if (!Number.isFinite(updated)) return { healthy: false, reason: "No reading timestamp" };
     if ((now - updated) > TEMP_FRESH_MS) {
@@ -295,6 +306,9 @@ export const MOTION_PULSE = "#3b82f6";
 export const TEMP_BORDER = "#fb923c";
 export const LOCK_BORDER = "#a78bfa";
 export const DOOR_BORDER = "#fb7185";
+// Indigo — its own hue, clear of both existing blues (motion, partition)
+// and both existing purples (WLED, lock).
+export const HUMIDITY_BORDER = "#818cf8";
 
 // ── Fixture shape ────────────────────────────────────────────────────────────
 // The marker's OUTLINE answers "what kind of light is that" without reading
@@ -323,6 +337,7 @@ export const LIGHT_SHAPES = [
   ["perimeter", "Room perimeter / cove"],
   ["motion",    "Motion sensor"],
   ["tempreadout", "Temperature readout"],
+  ["humidityreadout", "Humidity readout"],
   ["airquality", "Air quality sensor"],
   ["lock",      "Door lock"],
   ["door",      "Door/window sensor"],
@@ -355,6 +370,7 @@ export function deriveLightShape(l) {
   if (isMotionSensor(l)) return "motion";
   if (isDoorSensor(l)) return "door";
   if (isAirQualitySensor(l)) return "airquality";
+  if (isHumiditySensor(l)) return "humidityreadout";
   if (isTempSensor(l)) return "tempreadout";
   if (isLock(l)) return "lock";
   // A fan exposed as a light entity is not a light at all — worth seeing.
@@ -391,17 +407,18 @@ export function resolveLightShape(l, overrides) {
 // Letters reserved for a class series, skipped as the generic series counts
 // past them — precomputed once so another reserved letter is a one-line
 // change here, not new arithmetic.
-const _SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(c => c !== "D" && c !== "F" && c !== "L" && c !== "M" && c !== "P" && c !== "Q" && c !== "T" && c !== "W");
+const _SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(c => c !== "D" && c !== "F" && c !== "H" && c !== "L" && c !== "M" && c !== "P" && c !== "Q" && c !== "T" && c !== "W");
 
 // Mutates each light in place: sets l.code, l.isWled, l.isPartition,
-// l.isFan, l.isMotion, l.isDoor and l.isTemp. Pass EVERY entity (including
-// hidden ones) so codes stay stable when visibility changes. Domain classes
-// first — a fan is a fan, a sensor is a sensor, whatever they advertise;
-// then WLED before partition: a partition segment that ALSO carries
-// effects reads as WLED-class — the more capable identity wins.
+// l.isFan, l.isMotion, l.isDoor, l.isTemp and l.isHumidity. Pass EVERY
+// entity (including hidden ones) so codes stay stable when visibility
+// changes. Domain classes first — a fan is a fan, a sensor is a sensor,
+// whatever they advertise; then WLED before partition: a partition segment
+// that ALSO carries effects reads as WLED-class — the more capable
+// identity wins.
 export function assignLightCodes(lights) {
   const sorted = [...lights].sort((a, b) => a.entity_id.localeCompare(b.entity_id));
-  let f = 0, m = 0, w = 0, p = 0, t = 0, lk = 0, d = 0, q = 0, n = 0;
+  let f = 0, m = 0, w = 0, p = 0, t = 0, h = 0, lk = 0, d = 0, q = 0, n = 0;
   const seriesCode = (idx) =>
     _SERIES_LETTERS[Math.floor(idx / 99)] + String((idx % 99) + 1).padStart(2, "0");
   for (const l of sorted) {
@@ -409,7 +426,8 @@ export function assignLightCodes(lights) {
     l.isMotion = isMotionSensor(l);
     l.isDoor = isDoorSensor(l);
     l.isAir = isAirQualitySensor(l);
-    l.isTemp = !l.isAir && isTempSensor(l);
+    l.isHumidity = !l.isAir && isHumiditySensor(l);
+    l.isTemp = !l.isAir && !l.isHumidity && isTempSensor(l);
     l.isLock = isLock(l);
     if (l.isFan) {
       l.isWled = false; l.isPartition = false;
@@ -426,6 +444,9 @@ export function assignLightCodes(lights) {
     } else if (l.isTemp) {
       l.isWled = false; l.isPartition = false;
       l.code = "T" + String((t++ % 99) + 1).padStart(2, "0");
+    } else if (l.isHumidity) {
+      l.isWled = false; l.isPartition = false;
+      l.code = "H" + String((h++ % 99) + 1).padStart(2, "0");
     } else if (l.isLock) {
       l.isWled = false; l.isPartition = false;
       l.code = "L" + String((lk++ % 99) + 1).padStart(2, "0");

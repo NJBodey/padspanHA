@@ -27,7 +27,7 @@ const { fabricFrame, markerScale, markerRadiusPx, cmFromHandlePx, MAX_FIXTURE_CM
 const { ensureLightsRegistry, gatherLights, buildLightsMapCard, buildLightsTable, lightIsTouched,
         sunAmbient, lastBrightness, spreadInRoom, createUndoStack, setOptimistic, clearOptimistic, effectiveState,
         wireUseSurface, openControlCard, openRoomSheet, openFloorSheet, openActivityCalendar, setManyStates,
-        isOutdoorFloorId, wireHoverHud } =
+        isOutdoorFloorId, wireHoverHud, pressRing, HOLD_MS, PRESS_RING_MS } =
   await import(`./lights_map.js${new URL(import.meta.url).search}`);
 // Fixture-shape vocabulary + derivation (the tab owns the manual override UI).
 const { LIGHT_SHAPES, deriveLightShape } =
@@ -3942,7 +3942,7 @@ const BRIGHT_PRO_MANUAL = [
         "body": "Open Mapping → Lights. Every light starts out clustered at the centre of its room, waiting to be placed. There are two ways to move it to its real spot: drag it there directly, or queue it and tap the map.",
         "steps": [
           "To place one by dragging: click its marker on the map and drag it to where the fixture really sits, then let go.",
-          "To place one by tapping: click Place next to its row in the light index below the map — or click \"Queue all unplaced\" to queue every unplaced light in the house at once.",
+          "To place one by tapping: click + Place next to its row in the light index below the map — or click \"Queue all unplaced\" to queue every unplaced light in the house at once.",
           "Click the map exactly where that light is. It's placed, and the next light waiting in the queue is named in the bar above the map, ready for its own tap.",
           "Press Esc, or click the queue button again, to clear whatever is still queued."
         ],
@@ -7477,12 +7477,26 @@ function _wireLightsBuild(ctx, isoDiv, o) {
   // multi-light edit needs). 500ms matches the row's own long-press-for-
   // controls elsewhere in this table.
   for (const rg of isoDiv.querySelectorAll("g.lroom[data-room]")) {
-    let lpTimer = null, longPressed = false;
+    let lpTimer = null, ringT = null, ring = null, longPressed = false;
+    const rrect = rg.querySelector("rect");
     rg.addEventListener("pointerdown", (ev) => {
       longPressed = false;
-      lpTimer = setTimeout(() => { longPressed = true; }, 500);
+      // The same ring a marker's own long press already shows (wireUseSurface
+      // / pressRing) — appears at PRESS_RING_MS, fills to HOLD_MS, gold once
+      // armed. Garry, 2026-09-15: "add the little animation where is it not
+      // used now" — pure visual, the longPressed timing below is untouched.
+      if (rrect) {
+        const rx = parseFloat(rrect.getAttribute("x")), ry = parseFloat(rrect.getAttribute("y"));
+        const rw2 = parseFloat(rrect.getAttribute("width")), rh2 = parseFloat(rrect.getAttribute("height"));
+        ringT = setTimeout(() => { ring = pressRing(svg, rx + rw2 / 2, ry + rh2 / 2, Math.max(14, rh2 * 0.9)); }, PRESS_RING_MS);
+      }
+      lpTimer = setTimeout(() => { longPressed = true; if (ring) ring.classList.add("armed"); }, HOLD_MS);
     });
-    const cancelTimer = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+    const cancelTimer = () => {
+      if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+      if (ringT) { clearTimeout(ringT); ringT = null; }
+      if (ring) { try { ring.remove(); } catch (_) {} ring = null; }
+    };
     rg.addEventListener("pointerup", cancelTimer);
     rg.addEventListener("pointerleave", cancelTimer);
     rg.addEventListener("pointercancel", cancelTimer);
@@ -7664,7 +7678,15 @@ function _wireLightsBuild(ctx, isoDiv, o) {
       // uses elsewhere in this table.
       let longPressed = false;
       let longPressCancelled = false;
-      const lpTimer = setTimeout(() => { longPressed = true; }, 500);
+      // The same ring wireUseSurface's own marker hold already shows —
+      // appears at PRESS_RING_MS, fills to HOLD_MS, gold once armed. Garry,
+      // 2026-09-15: "add the little animation where is it not used now" —
+      // purely visual, layered onto the SAME lpTimer/longPressed this
+      // already ran on, not a second timer with its own timing to drift.
+      let ring = null;
+      const ringT = setTimeout(() => { ring = pressRing(svg, originCx, originCy, 12); }, PRESS_RING_MS);
+      const lpTimer = setTimeout(() => { longPressed = true; if (ring) ring.classList.add("armed"); }, HOLD_MS);
+      const cancelRing = () => { clearTimeout(ringT); if (ring) { try { ring.remove(); } catch (_) {} ring = null; } };
       try { g.setPointerCapture(ev.pointerId); } catch (_) {}
       // Group drag: when the grabbed light is part of the multi-selection,
       // every selected PLACED light moves with it by the same delta — each
@@ -7691,6 +7713,7 @@ function _wireLightsBuild(ctx, isoDiv, o) {
         if (!longPressCancelled && Math.abs(dx) + Math.abs(dy) > 3) {
           longPressCancelled = true;
           clearTimeout(lpTimer);
+          cancelRing();
         }
         // Arm the drag (and the render freeze) only once this is genuinely a
         // drag. 8px, not 3: every hex is draggable now, so a twitch while
@@ -7724,6 +7747,7 @@ function _wireLightsBuild(ctx, isoDiv, o) {
         g.removeEventListener("pointerup", up);
         g.removeEventListener("pointercancel", up);
         clearTimeout(lpTimer);
+        cancelRing();
         try { g.releasePointerCapture(ev.pointerId); } catch (_) {}
         o.mapState._editDragging = false;
         if (!moved || e.type === "pointercancel") {
@@ -8190,7 +8214,7 @@ function _lightsTourSteps(paid){
       body: "Every light starts out clustered at the centre of its room. This is where you tell PadSpan exactly where each one really hangs — and, if you have a key, its shape, size, colour and effects too.",
       find: null },
     { title: "Place a light",
-      body: "Drag any light on the map to its real spot. Or click Place next to its row in the list below the map, then tap the map where it is.",
+      body: "Drag any light on the map to its real spot. Or click + Place next to its row in the list below the map, then tap the map where it is.",
       find: (wrap) => wrap.querySelector(".lv-stage") },
     { title: "Give it a shape",
       body: "Click a light — on the map or in the list — to select it. A panel opens underneath with Shape, size and rotation. Pick the glyph that matches the real fixture, or leave it on Auto for PadSpan's own guess.",
@@ -9344,9 +9368,10 @@ function _lightsTab(ctx, maps, active) {
     }, `⎘ Apply look to ${selSet.size - 1} selected`));
 
     const on = l.state === "on";
-    // A read-only class (motion, door/window, temperature, air quality) has
-    // nothing to switch — the button only ever produced the read-only toast.
-    if (!(l.isMotion || l.isDoor || l.isTemp || l.isAir)) insp.appendChild(el("button", {
+    // A read-only class (motion, door/window, temperature, humidity, air
+    // quality) has nothing to switch — the button only ever produced the
+    // read-only toast.
+    if (!(l.isMotion || l.isDoor || l.isTemp || l.isHumidity || l.isAir)) insp.appendChild(el("button", {
       class: `lv-onoff ${on ? "on" : "off"}`,
       onclick: () => toggle(l.entity_id),
     }, on ? "Turn Off" : "Turn On"));

@@ -4,6 +4,20 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.42 — Humidity sensors, a placement bug fixed, and the hold-ring everywhere (2026-09-15)
+
+### Placing a sensor now actually shows a marker
+- **Fixed:** placing a motion, temperature, humidity, air-quality or lock sensor with "Hide untouched" on left the marker invisible — both while dragging it into place and forever after saving, with nothing left to see, drag or confirm ("I did place the air sensors, the placing tools don't work"). These classes draw a fixed glyph and border colour with nothing of their own to size, rotate or recolour, so the untouched heuristic could never be satisfied by them. A bare position now counts as touched for all five classes, the same way a linked door already did.
+
+### Humidity
+- **Added:** humidity sensors join the ceiling map as their own class (H-series codes, indigo glyph), placed, moved and selected exactly like temperature. A live reading shows as digits ("47%") when placed and reported within the hour, falling back to its code otherwise.
+
+### Placement, tidied up
+- **Changed:** the row placement button now reads "+ Place" / "◎ Queued", matching the "+ Add room" / "◎ Queue all unplaced" wording already used elsewhere on this map, instead of a plain "Place"/"Queued" label.
+- **Added:** the press-and-hold ring — the gold circle that fills in as you hold, already used on the map's preview surface — now shows on the Mapping tab's own builder too, for both holding a room name and holding a device marker to jump the list down to it. No change to what the hold does, only what it looks like while you're doing it.
+
+---
+
 ## 0.38.41 — Outdoor gear on the floor map, temperature tints, clickable plates, hover HUD everywhere, quiet motion after a restart (2026-09-14)
 
 ### Placing outdoor gear

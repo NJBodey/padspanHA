@@ -19,7 +19,7 @@
 // metres, and now that is the only thing it reads.
 
 const { WLED_BORDER, PARTITION_BORDER, FAN_BORDER, MOTION_BORDER, MOTION_PULSE, TEMP_BORDER, LOCK_BORDER, DOOR_BORDER,
-        AIR_BORDER, airQualityBadness } =
+        AIR_BORDER, HUMIDITY_BORDER, airQualityBadness } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 
 function escSVG(s){ return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
@@ -1723,6 +1723,16 @@ export function shapeSvg(kind, cx, cy, r, attrs){
         `height="${n(stemBot-stemTop)}" rx="${n(stemW/2)}" ${attrs}/>`+
         `<circle cx="${n(cx)}" cy="${n(cy+HW*0.55)}" r="${n(bulbR)}" ${attrs}/>`;
     }
+    // A humidity readout: a solid teardrop — the universal "water" glyph, a
+    // pointed top fused into a round bulb. Same technique as lock's
+    // shackle+body and door's leaf+handle: two solid primitives overlapped
+    // enough to read as one silhouette rather than two shapes.
+    case "humidityreadout": {
+      const bulbR=HW*0.40, bulbCy=cy+HW*0.14, apexY=cy-r*0.78, baseY=bulbCy-bulbR*0.5, baseW=bulbR*1.5;
+      const drop=sub([[cx,apexY],[cx-baseW/2,baseY],[cx+baseW/2,baseY]]);
+      return `<circle cx="${n(cx)}" cy="${n(bulbCy)}" r="${n(bulbR)}" ${attrs}/>`+
+        `<path d="${drop}" ${attrs}/>`;
+    }
     // A padlock: solid shackle arch over a solid body — the universal
     // access-control symbol, so a lock reads as a lock even to someone
     // who has never seen this map before. Solid, like every glyph here
@@ -1881,6 +1891,7 @@ export function lightClassOf(l){
   if(l.isDoor) return "door";
   if(l.isAir) return "air";
   if(l.isTemp) return "temp";
+  if(l.isHumidity) return "humidity";
   if(l.isLock) return "lock";
   if(l.isWled||l.isPartition) return "strip";
   return "light";
@@ -2668,7 +2679,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
   const liveRoomColor=(rname,fallback)=>{
     if(!SHOW) return fallback;
     const onLights=(byRoom[rname]||[]).filter(li=>
-      li.state==="on" && !hiddenEids.has(li.entity_id) && !li.isFan && !li.isMotion && !li.isTemp && !li.isAir && !li.isLock);
+      li.state==="on" && !hiddenEids.has(li.entity_id) && !li.isFan && !li.isMotion && !li.isTemp && !li.isAir && !li.isHumidity && !li.isLock);
     if(!onLights.length) return fallback;
     let rSum=0,gSum=0,bSum=0,wSum=0;
     for(const li of onLights){
@@ -2690,12 +2701,12 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
   if(SHOW){
     for(const l of lights){
       const li=lightsByEid[l.eid];
-      if(!li || li.state!=="on" || hiddenEids.has(l.eid) || li.isFan || li.isMotion || li.isTemp || li.isAir || li.isLock) continue;
+      if(!li || li.state!=="on" || hiddenEids.has(l.eid) || li.isFan || li.isMotion || li.isTemp || li.isAir || li.isHumidity || li.isLock) continue;
       const c=(FIELD ? fieldColOf(l.x,l.y,l.z) : null) || glowCol(li,l.lp);
       if(!glowIds.has(c)) glowIds.set(c, `psglow_${glowIds.size}`);
     }
     for(const rname of Object.keys(byRoom||{})) for(const li of byRoom[rname]||[]){
-      if(li.state!=="on" || hiddenEids.has(li.entity_id) || li.isFan || li.isMotion || li.isTemp || li.isAir || li.isLock) continue;
+      if(li.state!=="on" || hiddenEids.has(li.entity_id) || li.isFan || li.isMotion || li.isTemp || li.isAir || li.isHumidity || li.isLock) continue;
       const rc=FIELD && roomCentre.get(rname);
       const c=(rc ? fieldColOf(rc[0],rc[1],rc[2]) : null) || glowCol(li, null);
       if(!glowIds.has(c)) glowIds.set(c, `psglow_${glowIds.size}`);
@@ -3225,7 +3236,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         // center not activating on motion... only some sensors"): the
         // pulse ring is a separate code path and kept firing, but the
         // glyph itself had been swapped for a transparent hit rect.
-        if(!l || l.shape==="perimeter" || l.isMotion || l.isFan || l.isTemp || l.isAir) continue;
+        if(!l || l.shape==="perimeter" || l.isMotion || l.isFan || l.isTemp || l.isAir || l.isHumidity) continue;
         const r=hereRooms.find(rr=>pointInRoom(rr.pts, pl.x, pl.y));
         if(!r || r.pts.length<3) continue;
         const weight=automorphFixtureWeight(pl.lp&&pl.lp.width_cm, pl.lp&&pl.lp.height_cm);
@@ -3394,7 +3405,8 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         :(l.isDoor?DOOR_BORDER
         :(l.isTemp?TEMP_BORDER
         :(l.isAir?AIR_BORDER
-        :(l.isLock?LOCK_BORDER:null)))))));
+        :(l.isHumidity?HUMIDITY_BORDER
+        :(l.isLock?LOCK_BORDER:null))))))));
       const stroke=SHOW
         ? (on?(stripBorder||THEME.fixtureOnStrokeFallback):THEME.fixtureOffStroke)
         : (stripBorder||"#60a5fa");
@@ -3413,6 +3425,12 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       const tempLive=!!(l.isTemp && entry && Number.isFinite(l.temperature)
                         && tempFreshMs>=0 && tempFreshMs<TEMP_FRESH_MS);
       const tempTint=tempLive ? TEMP_TINT[tempBandOf(Number(l.temperature))] : null;
+      // Live humidity readout — same placed+fresh gate as temperature
+      // (Garry, 2026-09-15: "set it up like temperature"), no tint bands:
+      // that was a temperature-specific request, not part of this one.
+      const humidityFreshMs=l.isHumidity && l.last_changed ? NOW_MS-Date.parse(l.last_changed) : NaN;
+      const humidityLive=!!(l.isHumidity && entry && Number.isFinite(l.humidity)
+                        && humidityFreshMs>=0 && humidityFreshMs<TEMP_FRESH_MS);
       // A perimeter light's body IS its trace ("should be just the custom
       // shape formed to the room" — Garry, then: "Keep the glow, and the
       // click space of the square, but hide the square"). So: the Showcase
@@ -3570,6 +3588,15 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
           `fill="${tempTint.ink}" paint-order="stroke" stroke="#050d09" stroke-width="${(TEMP_DIGIT_PX*0.32).toFixed(1)}" `+
           `stroke-linejoin="round" pointer-events="none">${l.temperature}</text>`
         : null;
+      // Same live-readout replacement as temperature, one class down: a
+      // fixed indigo (no tint bands — those were a temperature-specific
+      // request), "%" suffixed.
+      const humidityLbl=humidityLive
+        ? `<text x="${hx.toFixed(1)}" y="${hy.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" `+
+          `font-family="ui-monospace,monospace" font-size="${TEMP_DIGIT_PX.toFixed(1)}" font-weight="800" `+
+          `fill="${HUMIDITY_BORDER}" paint-order="stroke" stroke="#050d09" stroke-width="${(TEMP_DIGIT_PX*0.32).toFixed(1)}" `+
+          `stroke-linejoin="round" pointer-events="none">${l.humidity}%</text>`
+        : null;
       // HIDECODES + CODECHIP (the sidebar, always; the builder's own
       // "Preview as sidebar") keeps the chip's tap target, invisibly — see
       // codeChipSvg's own comment. Plain HIDECODES (the builder's normal
@@ -3586,7 +3613,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         return `<rect data-hit="1" x="${(cx-w/2).toFixed(1)}" y="${(cy-h/2).toFixed(1)}" `+
           `width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="transparent" stroke="none" pointer-events="all"/>`;
       };
-      const lbl=tempLbl!==null ? tempLbl : (HIDECODES ? (CODECHIP ? codeChipSvg(l,hx,hy,SHOW?tCol:"#e2e8f0",chipGap,true) : "") : (CODECHIP ? codeChipSvg(l,hx,hy,SHOW?tCol:"#e2e8f0",chipGap) : (SHOW
+      const lbl=tempLbl!==null ? tempLbl : humidityLbl!==null ? humidityLbl : (HIDECODES ? (CODECHIP ? codeChipSvg(l,hx,hy,SHOW?tCol:"#e2e8f0",chipGap,true) : "") : (CODECHIP ? codeChipSvg(l,hx,hy,SHOW?tCol:"#e2e8f0",chipGap) : (SHOW
         ? labelHit(hx,lblY,CODE_PX*0.92)+
           `<text x="${hx.toFixed(1)}" y="${lblY.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" `+
           `font-family="ui-monospace,monospace" font-size="${(CODE_PX*0.92).toFixed(1)}" font-weight="700" `+
@@ -3897,7 +3924,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       // Defensive twin of the exclusion in the partition-grouping pass
       // above — motion/fan/temp never get a cell there any more, but this
       // function must refuse to aura them even if ever called directly.
-      if(!(AUTOMORPH_PCT>0) || !room || room.pts.length<3 || l.isMotion || l.isFan || l.isTemp || l.isAir) return null;
+      if(!(AUTOMORPH_PCT>0) || !room || room.pts.length<3 || l.isMotion || l.isFan || l.isTemp || l.isAir || l.isHumidity) return null;
       // Inset stage — the shared automorphInsetRing above (smoothing,
       // well-spaced offset, fold pruning, containment, and the hardness cap
       // derived from the same margin). One inset constant was serving two
@@ -5280,7 +5307,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       if(l.state!=="on") return "";
       // Fans, motion sensors and temperature readouts are on the map, but
       // they are not light sources — nothing pools on the floor beneath them.
-      if(l.isFan||l.isMotion||l.isTemp||l.isAir) return "";
+      if(l.isFan||l.isMotion||l.isTemp||l.isAir||l.isHumidity) return "";
       const col=(fx&&fx.col)||glowCol(l,entry);
       const b=briOf(l);
       const beam=BEAM[l.shape]||1;
@@ -5442,9 +5469,12 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         const near=(ly)=>hereLights.some(l=>{
           const [mx2,my2]=iso(l.x,l.y,z);
           const lb=lightsByEid[l.eid];
-          const fresh=(lb&&lb.isTemp&&lb.last_changed) ? NOW_MS-Date.parse(lb.last_changed) : NaN;
-          const readout=!!(lb&&lb.isTemp&&Number.isFinite(lb.temperature)&&fresh>=0&&fresh<TEMP_FRESH_MS);
-          const halfW=readout ? String(lb.temperature).length*TEMP_DIGIT_PX*0.3 : 0;
+          // Same footprint problem, one class down: a live humidity readout
+          // is digits too, not a dot.
+          const fresh=(lb&&(lb.isTemp||lb.isHumidity)&&lb.last_changed) ? NOW_MS-Date.parse(lb.last_changed) : NaN;
+          const readout=!!(lb&&(lb.isTemp||lb.isHumidity)&&Number.isFinite(lb.isTemp?lb.temperature:lb.humidity)&&fresh>=0&&fresh<TEMP_FRESH_MS);
+          const digits=lb&&lb.isTemp?lb.temperature:lb&&lb.humidity!=null?`${lb.humidity}%`:"";
+          const halfW=readout ? String(digits).length*TEMP_DIGIT_PX*0.3 : 0;
           const halfH=readout ? TEMP_DIGIT_PX/2 : 0;
           return Math.abs(mx2-lix)<rw/2+halfW && Math.abs(my2-ly)<9+halfH;
         });
@@ -5872,7 +5902,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         // Wall spill: every wall of the fixture's room its pool actually
         // reaches, faded by how far away the wall is.
         let spillSegs=null;
-        if(room && l.state==="on" && !l.isFan && !l.isMotion && !l.isTemp && !l.isAir){
+        if(room && l.state==="on" && !l.isFan && !l.isMotion && !l.isTemp && !l.isAir && !l.isHumidity){
           const reach=poolReachM(l)*0.8;
           for(let i=0,j=room.pts.length-1;i<room.pts.length;j=i++){
             const d=pointSegDist(pl.x, pl.y, room.pts[j], room.pts[i]);
