@@ -207,29 +207,31 @@ export const SHOWCASE_THEMES = {
     // idea is deep-sea life, and nothing living has hard edges: this is now
     // the EDGELESS theme — the faintest, thinnest room outlines in the set,
     // soft bodies of glow instead, wide diffuse pools, lowercase labels, a
-    // pale-aqua accent (Neo HUD's cyan is saturated, Aurora's mint is
-    // green-leaning) on an abyss-black ground.
+    // blue-white accent — dinoflagellate blue, not a second green (Aurora
+    // owns mint) — on an abyss-black ground. And where Aurora's glow is in
+    // the sky and the rooms, this one's is in the creatures: the highest
+    // fixture bloom in the set over quiet, barely-lit rooms.
     label: "Organic Bioluminescent",
-    vignetteStops: [[0,"#04121c",0.65], [60,"#020a12",0.3], [100,"#000205",0]],
-    slabStops: [[0,"#5ff5dc",0.06], [100,"#020a12",0.12]],
-    slabSideTop: {fill:"#061a24", fillOpacity:0.3, stroke:"#0f2e3a"},
-    slabSideFront: {fill:"#04121a", fillOpacity:0.26, stroke:"#0f2e3a"},
-    glossStops: [[0,"#c8fff4",0.18], [45,"#5ff5dc",0.05], [100,"#000000",0.16]],
-    washStops: [[0,"#5ff5dc",0.08], [100,"#5ff5dc",0]],
+    vignetteStops: [[0,"#030d1a",0.65], [60,"#02070f",0.3], [100,"#000205",0]],
+    slabStops: [[0,"#8fdcff",0.06], [100,"#02070f",0.12]],
+    slabSideTop: {fill:"#05161f", fillOpacity:0.3, stroke:"#0e2a3a"},
+    slabSideFront: {fill:"#03101a", fillOpacity:0.26, stroke:"#0e2a3a"},
+    glossStops: [[0,"#d8f2ff",0.18], [45,"#8fdcff",0.05], [100,"#000000",0.16]],
+    washStops: [[0,"#8fdcff",0.06], [100,"#8fdcff",0]],
     shadeStops: [[0,"#00050b",0.45], [55,"#00050b",0.18], [100,"#00050b",0]],
-    roomEdgeStroke: "#0a2a34",
-    roomFillOpacity: 0.10,
+    roomEdgeStroke: "#0a2434",
+    roomFillOpacity: 0.08,
     roomStrokeOpacity: 0.12,
     roomStrokeWidth: 0.8,
-    roomGlowStops: [[0,0.42], [50,0.16], [100,0]],
-    roomLabelOpacity: 0.6,
+    roomGlowStops: [[0,0.16], [50,0.05], [100,0]],
+    roomLabelOpacity: 0.55,
     roomLabelLetterSpacing: "0.08em",
     roomLabelUppercase: false,
-    poolStops: [[0,0.8], [35,0.45], [70,0.15], [100,0]],
-    fixtureOffFill: "#0c1f28",
-    fixtureOnStrokeFallback: "#a7fff0",
-    fixtureOffStroke: "#2f5561",
-    fixtureBloomOpacity: 0.5,
+    poolStops: [[0,0.85], [30,0.4], [65,0.12], [100,0]],
+    fixtureOffFill: "#0a1a26",
+    fixtureOnStrokeFallback: "#bfe9ff",
+    fixtureOffStroke: "#2a4a5e",
+    fixtureBloomOpacity: 0.7,
     fixtureBodyOnOpacity: 0.8,
     fixtureBodyOffOpacity: 0.35,
     inkOffColor: "#5e8a94",
