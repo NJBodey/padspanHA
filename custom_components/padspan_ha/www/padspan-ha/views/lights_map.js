@@ -2505,6 +2505,10 @@ export function buildLightsTable(host, lights){
     // point at the same things.
     const dimmed = !classMatches(l, host.classFilter);
     const isSel = !!(selected && selected.has(l.entity_id));
+    // Captured from the code cell's own swatch icon below, so the row's
+    // long-press ring (see onRowLongPress wiring, further down) has an
+    // existing SVG to draw into instead of needing one of its own.
+    let codeSwatchSvg = null;
     const row = el("tr", { "data-eid": l.entity_id,
       class: isSel ? "lv-row-sel" : "",
       style: `cursor:pointer;opacity:${isHidden ? "0.45" : (dimmed ? "0.4" : "1")}` }, [
@@ -2541,6 +2545,7 @@ export function buildLightsTable(host, lights){
         svg.setAttribute("viewBox", "0 0 15 15");
         svg.setAttribute("style", "vertical-align:-2px;margin-right:5px");
         svg.innerHTML = shapeSvg(l.shape, 7.5, 7.5, 5.6, `fill="none" stroke="${swatch}" stroke-width="1.6"`);
+        codeSwatchSvg = svg;
         return [svg, el("span", { style: `font-family:monospace;font-weight:700;color:${swatch};font-size:12px` }, l.code)];
       })()),
       el("td", {}, l.friendly_name),
@@ -2759,16 +2764,35 @@ export function buildLightsTable(host, lights){
       if (row._lpFired) { row._lpFired = false; return; }
       host.onRowClick(l);
     });
-    // Optional long-press (500ms) — the sidebar hangs the effects popup on
+    // Optional long-press (HOLD_MS) — the sidebar hangs the effects popup on
     // it so the plain tap stays the light switch; a host that passes no
-    // handler (the Mapping tab) keeps plain clicks only.
+    // handler (the Mapping tab) keeps plain clicks only. 2026-09-17 finding:
+    // this was the one hold gesture in the app with no gold press-ring, no
+    // touch-action of its own and no pointer capture — every marker hold
+    // (wireUseSurface, the Atlas builder, the room-name long-press) already
+    // has all three, so this looked scattered next to them: the same
+    // "open effects" action gave a visual warning on the map and none at
+    // all in the list. Reuses the code cell's own swatch icon as the ring's
+    // canvas instead of adding a second SVG just for this.
     if (host.onRowLongPress) {
-      let lpTimer = null;
-      row.addEventListener("pointerdown", () => {
+      row.style.touchAction = "none";
+      let lpTimer = null, ringT = null, ring = null, capturedId = null;
+      row.addEventListener("pointerdown", (ev) => {
         row._lpFired = false;
-        lpTimer = setTimeout(() => { row._lpFired = true; host.onRowLongPress(l); }, 500);
+        try { row.setPointerCapture(ev.pointerId); capturedId = ev.pointerId; } catch (_) {}
+        if (codeSwatchSvg) ringT = setTimeout(() => { ring = pressRing(codeSwatchSvg, 7.5, 7.5, 5.6); }, PRESS_RING_MS);
+        lpTimer = setTimeout(() => {
+          row._lpFired = true;
+          if (ring) ring.classList.add("armed");
+          host.onRowLongPress(l);
+        }, HOLD_MS);
       });
-      const lpCancel = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+      const lpCancel = () => {
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        if (ringT) { clearTimeout(ringT); ringT = null; }
+        if (ring) { try { ring.remove(); } catch (_) {} ring = null; }
+        if (capturedId !== null) { try { row.releasePointerCapture(capturedId); } catch (_) {} capturedId = null; }
+      };
       row.addEventListener("pointerup", lpCancel);
       row.addEventListener("pointerleave", lpCancel);
       row.addEventListener("pointercancel", lpCancel);

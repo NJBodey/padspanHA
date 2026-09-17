@@ -7371,7 +7371,7 @@ export async function _commitDoorCircle(ctx, mapState) {
 
 // Wire the build tools onto the shared iso SVG: click any hex to select it,
 // drag any hex to place/move it. Runs after every SVG rebuild.
-function _wireLightsBuild(ctx, isoDiv, o) {
+export function _wireLightsBuild(ctx, isoDiv, o) {
   const svg = isoDiv.querySelector("svg");
   if (!svg) return;
   const toVB = (ev) => {
@@ -7775,17 +7775,36 @@ function _wireLightsBuild(ctx, isoDiv, o) {
         try { g.releasePointerCapture(ev.pointerId); } catch (_) {}
         o.mapState._editDragging = false;
         if (!moved || e.type === "pointercancel") {
-          // Plain click (or a cancelled gesture): select the light; the
-          // inspector holds the tools. Never write a position here.
-          // Shift-click adds to / removes from the multi-selection instead.
           g.removeAttribute("transform");
           for (const m of group) m.g.removeAttribute("transform");
-          // Alt+click: the browser always hands the click to the marker on
-          // TOP, so this is the way to reach one underneath it — the next
-          // marker down the stack at the pointer, cycling round on repeated
-          // Alt+clicks (Garry, 2026-09-12: "make it so the device underneath
-          // can also be selected somehow"). The hover HUD names the stack
+          // A cancelled gesture (the OS yanking the touch away) does
+          // nothing at all — never a toggle, never a select — matching
+          // every sibling drag handler on this tab (2026-09-16/17 finding).
+          if (e.type === "pointercancel") return;
+          // Alt+click and shift-click are deliberate, modifier-gated power
+          // moves — already "harder to reach" by construction, so they keep
+          // selecting/cycling regardless of hold time. The browser always
+          // hands the click to the marker on TOP, so alt+click is the way
+          // to reach one underneath it — the next marker down the stack at
+          // the pointer, cycling round on repeated Alt+clicks (Garry,
+          // 2026-09-12: "make it so the device underneath can also be
+          // selected somehow"). The hover HUD names the stack
           // (_wireHoverHud) so you can see what you're cycling through.
+          const hasModifier = e.altKey || ev.altKey || ev.shiftKey || o.mapState._multiSelect;
+          // Garry, 2026-09-17: "if I click anywhere on a shape created to
+          // represent a device, most cases a light, the primary should
+          // always be to turn on that light/device. Secondary features
+          // should be more difficult to activate." A plain quick tap with
+          // no modifier and no genuine hold now toggles the device — the
+          // SAME primary gesture the sidebar and Preview-as-sidebar mode
+          // already use (wireUseSurface) — instead of selecting it for the
+          // builder's own tools. Selecting for edit/transform moves to the
+          // harder-to-reach gesture: a real 500ms+ still hold, exactly the
+          // ring/HOLD_MS this handler already tracked for the table-jump.
+          if (!hasModifier && !longPressed) {
+            if (o.toggle) o.toggle(eid);
+            return;
+          }
           let selEid = eid;
           if ((e.altKey || ev.altKey) && stackAt) {
             const stack = stackAt(e.clientX, e.clientY);
@@ -7794,7 +7813,7 @@ function _wireLightsBuild(ctx, isoDiv, o) {
               selEid = stack[i < 0 ? 1 : (i + 1) % stack.length];
             }
           }
-          if (ev.shiftKey || (o.mapState._multiSelect && e.type !== "pointercancel")) {
+          if (ev.shiftKey || o.mapState._multiSelect) {
             if (selSet.has(selEid)) selSet.delete(selEid); else selSet.add(selEid);
             if (o.mapState._selLight && selSet.size && !selSet.has(o.mapState._selLight.eid)) selSet.add(o.mapState._selLight.eid);
           } else {
@@ -8249,7 +8268,7 @@ function _lightsTourSteps(paid){
       body: "Drag any light on the map to its real spot. Or click + Place next to its row in the list below the map, then tap the map where it is.",
       find: (wrap) => wrap.querySelector(".lv-stage") },
     { title: "Give it a shape",
-      body: "Click a light — on the map or in the list — to select it. A panel opens underneath with Shape, size and rotation. Pick the glyph that matches the real fixture, or leave it on Auto for PadSpan's own guess.",
+      body: "Click a light in the list below the map (or hold one still on the map itself) to select it. A panel opens underneath with Shape, size and rotation. Pick the glyph that matches the real fixture, or leave it on Auto for PadSpan's own guess.",
       find: (wrap) => _lightsTourFindTable(wrap) },
     { title: "Fans, motion, temperature — and WLED",
       body: "The chips above the map isolate one kind of device at a time — Lights, Strips, Fans, Motion, Temps, Air. A strip with effects (WLED or similar) gets its own colour and effect controls: hold it, on the map or in the sidebar, to open them.",
@@ -8458,7 +8477,7 @@ function _lightsTab(ctx, maps, active) {
       el("span", { class: "lv-hint" }, paid
         ? (preview
           ? "Exactly what the Atlas sidebar does with this map: tap switches, code or hold opens controls, room names open the room."
-          : "Builds the Atlas sidebar's map — what you arrange here is exactly what the sidebar shows. Click a hex to select a light; drag it to where it really is. Shift-click or click a room name to select several. Can't find one on the map? Pick it in the list below — a ring flashes its spot, and the pink marker in the corner drags it into place.")
+          : "Builds the Atlas sidebar's map — what you arrange here is exactly what the sidebar shows. Tap a hex to switch it, same as everywhere else; hold it still to select it for editing, and drag it to where it really is. Shift-click or click a room name to select several. Can't find one on the map? Pick it in the list below — a ring flashes its spot, and the pink marker in the corner drags it into place.")
         : "Every light in the house, one marker each, in its room. Click a marker to switch it."),
       (() => {
         const b = el("button", { class: "btn inline", style: "font-size:11px;margin-left:auto" }, "🎓 Guide me");
@@ -9022,7 +9041,7 @@ function _lightsTab(ctx, maps, active) {
     onHexesBuilt: preview
       ? (isoDiv) => requestAnimationFrame(() => wireUseSurface(isoDiv, previewApi))
       : paid
-      ? (isoDiv) => _wireLightsBuild(ctx, isoDiv, { mapState, view, lightsByEid, model: modelForRender, onDropPlace })
+      ? (isoDiv) => _wireLightsBuild(ctx, isoDiv, { mapState, view, lightsByEid, model: modelForRender, onDropPlace, toggle })
       : (isoDiv) => requestAnimationFrame(() => {
           isoDiv.querySelectorAll(".lhex").forEach(g => {
             g.style.cursor = "pointer";
