@@ -4,6 +4,15 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.47 — Ten near-identical Automorph styles replaced with six real new ones (2026-09-17)
+
+### Automorph
+- **Removed:** Circuit, Contour, Facet, Ink Wash, Stained Glass, Constellation, Pulse, Orbit Rings, Puzzle Piece and Shatter. A side-by-side render of every style showed they all decorated the same morphed outline with different linework — a dashed border here, dotted there — so the silhouette never actually changed, and at real map-marker size they all read as one soft blob.
+- **Added:** Shard Burst (separate scattered fragments), Origami Fold (a few large flat folded panels), Ink Bleed (an asymmetric bleed, never smooth or symmetric), Rosette (a mandala of overlapping petals), Lens Flare (a receding chain of discs along one axis) and Mycelium (a branching filament network) — each reshapes the actual silhouette or composition, confirmed distinct at the size a marker is actually seen at, not just up close.
+- **Kept:** Glow, Blueprint, Nebula, Halo, Spike Crown, Scalloped Wave, Bloom, Geode Cluster, Honeycomb and Block Extrude.
+
+---
+
 ## 0.38.46 — Automorph now morphs the shape you actually chose (2026-09-17)
 
 ### Automorph
