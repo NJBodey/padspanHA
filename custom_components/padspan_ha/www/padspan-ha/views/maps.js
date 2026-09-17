@@ -7479,7 +7479,18 @@ function _wireLightsBuild(ctx, isoDiv, o) {
   for (const rg of isoDiv.querySelectorAll("g.lroom[data-room]")) {
     let lpTimer = null, ringT = null, ring = null, longPressed = false;
     const rrect = rg.querySelector("rect");
+    // 2026-09-16 finding: this was the one gesture on the tab with no
+    // touch-action of its own and no pointer capture — every other hold
+    // here (marker drag, resize handles, door circle) sets both. Without
+    // them, a real finger's natural micro-drift during the hold can read
+    // to the BROWSER as the start of a scroll (.lv-stage is overflow:auto)
+    // and get silently taken over for panning instead of completing the
+    // press — relying on pointerleave alone to notice was never reliable.
+    rg.style.touchAction = "none";
+    let downX = 0, downY = 0, capturedId = null;
     rg.addEventListener("pointerdown", (ev) => {
+      try { rg.setPointerCapture(ev.pointerId); capturedId = ev.pointerId; } catch (_) {}
+      downX = ev.clientX; downY = ev.clientY;
       longPressed = false;
       // The same ring a marker's own long press already shows (wireUseSurface
       // / pressRing) — appears at PRESS_RING_MS, fills to HOLD_MS, gold once
@@ -7496,7 +7507,20 @@ function _wireLightsBuild(ctx, isoDiv, o) {
       if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
       if (ringT) { clearTimeout(ringT); ringT = null; }
       if (ring) { try { ring.remove(); } catch (_) {} ring = null; }
+      if (capturedId !== null) { try { rg.releasePointerCapture(capturedId); } catch (_) {} capturedId = null; }
     };
+    // Real screen pixels off the raw event, matching wireUseSurface's own
+    // SLOP_PX=8 (lights_map.js) — not a zoom-dependent viewBox delta, which
+    // is a separate, larger inconsistency this session's fixes do not
+    // attempt to resolve everywhere (see the redesign notes).
+    rg.addEventListener("pointermove", (ev) => {
+      // Only while still WAITING to arm — once armed (longPressed=true),
+      // movement must not un-arm it, matching every other hold in this
+      // file: a hold that's already completed doesn't get cancelled by the
+      // hand settling before lifting.
+      if (longPressed) return;
+      if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > 8) cancelTimer();
+    });
     rg.addEventListener("pointerup", cancelTimer);
     rg.addEventListener("pointerleave", cancelTimer);
     rg.addEventListener("pointercancel", cancelTimer);
@@ -7995,7 +8019,7 @@ function _wireLightsPicker(ctx, isoDiv, svg, o, toVB) {
 // box at the fixture's own drawn size plus a line-and-knob above it for
 // rotation, both anchored on the fixture's true centre (see the cx/cy
 // fallback chain just below for why that's less obvious than it sounds).
-function _wireTransformHandles(ctx, svg, g, eid, frame, o, toVB) {
+export function _wireTransformHandles(ctx, svg, g, eid, frame, o, toVB) {
   const NS = "http://www.w3.org/2000/svg";
   // data-cx/data-cy — the fixture's exact drawn centre, set on the marker
   // group itself and never scaled, rotated, or removed by any display
@@ -8156,12 +8180,20 @@ function _wireTransformHandles(ctx, svg, g, eid, frame, o, toVB) {
         box.setAttribute("width", boxHalfW * 2); box.setAttribute("height", boxHalfH * 2);
         box.setAttribute("transform", `rotate(${next.rotation} ${cx} ${cy})`);
       };
-      const up = () => {
+      const up = (e) => {
         h.removeEventListener("pointermove", mm);
         h.removeEventListener("pointerup", up);
         h.removeEventListener("pointercancel", up);
         try { h.releasePointerCapture(ev.pointerId); } catch (_) {}
         o.mapState._editDragging = false;
+        // The only one of this tab's five drag handlers that committed
+        // unconditionally, with no way to even tell a real release from an
+        // interrupted one — 2026-09-16 finding. A pointercancel (the OS
+        // yanking the touch away mid-resize — a notification, switching
+        // apps) must discard the in-progress transform, same as every
+        // sibling drag handler already does, not silently keep whatever
+        // partial rotate/resize the last pointermove happened to compute.
+        if (e && e.type === "pointercancel") { ctx.actions.renderRooms(); return; }
         _pushUndo(o.mapState, [eid]);
         const draft = o.mapState._lightsDraftM || (o.mapState._lightsDraftM = {});
         const prev = draft[eid] || { ...(((ctx.state.model || {}).light_positions_m || {})[eid] || {}) };

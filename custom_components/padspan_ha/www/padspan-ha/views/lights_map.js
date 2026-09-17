@@ -291,6 +291,17 @@ export function spreadInRoom(pts, n, insetM = 0.5){
 // Movement past SLOP BEFORE arming cancels the gesture and hands it to the
 // map (pan). Pure: the host feeds it events and acts on what comes back.
 export const HOLD_MS = 500, PRESS_RING_MS = 150, SLOP_PX = 8;
+// `t` throughout is a timestamp, not wall-clock time — callers must pass
+// e.timeStamp (down/up, from the real event the browser captured) or
+// performance.now() (tick, called from a setTimeout with no event of its
+// own); both share one epoch. Garry, 2026-09-16, live: "a single press...
+// options are constantly popping up" — Date.now() sampled INSIDE the
+// handler measures when the handler finally ran, not when the finger
+// actually lifted; a busy main thread (this map is a large live SVG) can
+// delay a queued pointerup handler well past the real release, inflating
+// the measured hold past HOLD_MS for what was, physically, a clean fast
+// tap. e.timeStamp is captured by the browser at the real event, immune to
+// that delay.
 export function createHoldTracker({ holdMs = HOLD_MS, slopPx = SLOP_PX, canDrag = false } = {}){
   let st = null;
   return {
@@ -579,11 +590,11 @@ export function wireUseSurface(isoDiv, api){
       if (e.button !== undefined && e.button !== 0 && e.pointerType === "mouse") return;
       e.stopPropagation();
       try { g.setPointerCapture(e.pointerId); } catch (_) {}
-      tracker.down(e.clientX, e.clientY, Date.now());
+      tracker.down(e.clientX, e.clientY, Number.isFinite(e.timeStamp) ? e.timeStamp : performance.now());
       if (holdable) {
         ringT = setTimeout(() => { if (tracker.active) ring = ringAt(cx, cy, ringR); }, PRESS_RING_MS);
         armT = setTimeout(() => {
-          if (tracker.tick(Date.now()) === "arm") { if (ring) ring.classList.add("armed"); dragBri = null; }
+          if (tracker.tick(performance.now()) === "arm") { if (ring) ring.classList.add("armed"); dragBri = null; }
         }, HOLD_MS);
       }
     });
@@ -616,7 +627,7 @@ export function wireUseSurface(isoDiv, api){
     });
     const finish = (e) => {
       if (!tracker.active) return;
-      const r = e.type === "pointercancel" ? tracker.cancel() : tracker.up(Date.now());
+      const r = e.type === "pointercancel" ? tracker.cancel() : tracker.up(Number.isFinite(e.timeStamp) ? e.timeStamp : performance.now());
       clearAll();
       try { g.releasePointerCapture(e.pointerId); } catch (_) {}
       // Motion has nothing to switch — holdable is false for it, so it can
@@ -2318,6 +2329,37 @@ export function buildLightsMapCard(hostIn){
     mapCard.appendChild(bar);
   }
 
+  // 2026-09-16 live finding: the sticky toolbar (host.stickyToolbar, above)
+  // is a SIBLING of isoDiv, not a child of it — position:sticky pins it to
+  // the top of whatever scrolls, which on this tab is the outer page, not
+  // isoDiv's own internal pan/zoom scroll. So scrolling the PAGE (not
+  // panning the map) can bring the map's markers up underneath the
+  // toolbar's own opaque backdrop — which exists specifically so scrolled
+  // content never shows through it (see its own CSS comment), so a marker
+  // there isn't just unreachable, it is genuinely hidden, not merely
+  // mis-hit. Live reproduction: 3 of 5 sampled markers near the top of the
+  // stage resolved to the toolbar itself at their own drawn centre.
+  // A spacer sized to the toolbar's REAL rendered height (ResizeObserver,
+  // not a guessed constant — the row wraps to a different number of lines
+  // depending on viewport width and which panels are open) reserves that
+  // space instead, so the map's own content never starts high enough to
+  // reach that band in the first place. Sidebar host (stickyToolbar unset)
+  // gets no spacer — it never had the overlap to begin with.
+  if (host.stickyToolbar) {
+    const spacer = el("div", { style: "flex:0 0 auto" });
+    mapCard.appendChild(spacer);
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => {
+        spacer.style.height = ctrlRow.getBoundingClientRect().height + "px";
+      });
+      ro.observe(ctrlRow);
+    } else {
+      // No ResizeObserver (very old WebView) — a one-shot measurement
+      // after layout settles beats no protection at all, even though it
+      // won't track a later reflow (a window resize, say).
+      setTimeout(() => { spacer.style.height = ctrlRow.getBoundingClientRect().height + "px"; }, 0);
+    }
+  }
   mapCard.appendChild(isoDiv);
   const legend = buildShapeLegend(el, Object.values(host.lightsByEid));
   if (legend) mapCard.appendChild(legend);
