@@ -4,6 +4,13 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.43 — The Lights tab and panel are now Atlas (2026-09-16)
+
+### Renamed
+- **The Lights tab, and the separate Lights sidebar panel, are now called Atlas.** The device map behind that name covers a lot more than lights now — motion, temperature, humidity, air quality, locks and doors alongside fixtures — so "Lights" undersold it, and "Bright" was already spoken for: it's the name of a licence tier (`free`/`bright`/`pro`) that gates part of this very tab, and of the separately-distributed PadSpan Bright edition. Atlas doesn't collide with either. This changes what you see, not what anything does: `Mapping → Lights` is `Mapping → Atlas`, the standalone sidebar entry reads Atlas instead of Lights, and every help-manual heading and tooltip naming it follows suit. The device-class filter chip still labelled "Lights" — the one that isolates actual light fixtures from motion, temperature and the rest — is untouched; that's a different thing keeping its own name.
+
+---
+
 ## 0.38.42 — Humidity sensors, a placement bug fixed, and the hold-ring everywhere (2026-09-15)
 
 ### Placing a sensor now actually shows a marker
