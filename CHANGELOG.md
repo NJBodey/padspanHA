@@ -4,6 +4,21 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.45 — A tap on a device now always switches it, and the Atlas map's touch targets actually line up (2026-09-17)
+
+### Tapping a device
+- **Fixed:** in the Atlas builder's own map (Mapping → Atlas), a plain tap on a light, fan, lock or other device SELECTED it for editing instead of switching it — the one surface in the whole app where tapping a device did nothing to it. A quick tap now toggles the device first, exactly like the sidebar and Preview-as-sidebar already do; a genuine still hold (or Shift/Alt) selects it for editing instead, and dragging still moves it. This is also the direct explanation for the browser's own "pick one" list occasionally popping up on a single press: a tap that silently selected instead of switching invited pressing again or holding longer, which is what fires that menu.
+- **Fixed:** the sidebar's own light-index row long-press (opens the WLED/effects popup) gave no warning while held — no gold ring, no lock against the row swallowing the gesture as a scroll. It now matches every other hold in the app: the same ring, drawn into the row's own shape icon.
+
+### Touch targets on the Atlas map
+- **Fixed:** a background floor's own translucent overlay never stopped absorbing taps meant for whatever was drawn on top of it — its own invisible layer stayed "live" underneath the floor you were actually looking at, on both the Atlas builder and its sidebar.
+- **Fixed:** a marker on a floor you're not currently focused on could still steal a tap meant for the floor in front of it, for the same reason.
+- **Fixed:** a device's code label could sit close enough to a crowded neighbour to catch a tap meant for that neighbour — now pulled in the same way the tap-target halo already was.
+- **Fixed:** a handful of hit-testing gaps (an outdoor perimeter shape with no tap target of its own, a floor's own selector badge, a resize/rotate handle left mid-drag by an interrupted touch, a room name's hold racing the browser's own scroll) that could each independently make a touch land somewhere other than where it visibly was.
+- **Fixed:** on the Mapping tab, a pinned toolbar could end up floating over the map's own markers instead of sitting above them, since the two scroll independently — the toolbar now reserves the exact space it needs.
+
+---
+
 ## 0.38.44 — Nineteen Showcase themes you can tell apart, and a presets bar that says which box is which (2026-09-16)
 
 ### Showcase themes
