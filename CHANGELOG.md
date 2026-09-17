@@ -4,6 +4,18 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.44 — Nineteen Showcase themes you can tell apart, and a presets bar that says which box is which (2026-09-16)
+
+### Showcase themes
+- **Removed:** Editorial Minimalist, Elevated Architectural Blueprint and Nightscape City Lights. A similarity pass over all 22 themes found each within a hair of a theme it added nothing to — the concept lived in the name only. A saved look or a live setting that still names one falls back to Classic rather than breaking.
+- **Changed:** ten themes reworked so that every one of the nineteen has one hook no other theme shares, spread across shape as well as colour: **Neo HUD** is cyan linework with bright cyan room edges and the tightest light pools; **Luxury Real-Estate** is the simple one — white marble and brass on a light ground, hairline edges, next to no glow; **Aurora** is the soft one — a green-to-violet curtain, the biggest room glow and widest pools; **Retro-Futurism** is the bold one — a full orange-to-magenta-to-indigo sunset with hot-pink room edges; **Bold Neon Precision** is electric-violet neon-tube outlines with acid-green fixtures; **Art Deco** finally draws the gold room linework it always promised; **Automotive HUD** is a brushed-alloy mid-grey cockpit with a gauge-LED amber; **Wabi-Sabi** is sparse matte stone-grey washi with a matcha accent, against Hygge's dense cosy tan; **Organic Bioluminescent** is the edgeless one, its glow in the fixtures rather than the rooms, in a deep-sea blue-white; **Holographic** gets a pink-to-lilac-to-cyan wash. Measured, not eyeballed: the two most similar themes in the set are now further apart than the two most similar were before by more than double.
+- **Unchanged:** the twenty Automorph styles were audited too and left alone — each is its own drawing routine, not a variation.
+
+### Atlas presets
+- **Fixed:** the presets bar's "Select a look" dropdown and its name box were styled as the same dark pill side by side, so the dropdown read as a second name field and swallowed what you typed into it. The dropdown now leads with a chevron and the name box says what it is for.
+
+---
+
 ## 0.38.43 — The Lights tab and panel are now Atlas (2026-09-16)
 
 ### Renamed
