@@ -4,6 +4,13 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.46 — Automorph now morphs the shape you actually chose (2026-09-17)
+
+### Automorph
+- **Fixed:** Automorph's room-alignment morph only ever started from a real outline for three shapes — circle, bar and square. Every other choosable shape (pendant, sconce, chandelier, triangle, diamond, line, lock, door) silently fell back to the same plain hexagon, so no matter which of the ~12 shapes a fixture was set to, Automorph morphed the identical hex outline every time. Each of those nine shapes now morphs from its own real silhouette — the same one the plain, non-Automorph glyph already draws.
+
+---
+
 ## 0.38.45 — A tap on a device now always switches it, and the Atlas map's touch targets actually line up (2026-09-17)
 
 ### Tapping a device
