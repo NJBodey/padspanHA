@@ -4,6 +4,14 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.51 — Flood sensor filter fix, and the class relabeled Emergency (2026-09-18)
+
+### Flood sensors
+- **Fixed:** the Mapping tab's inspector panel still showed a Turn On/Off button for a placed flood sensor — harmless (nothing on the other end of a click would have done anything), but wrong for a read-only class, the same gap 0.38.42 closed for motion/temperature/humidity/air quality. This is a second, independent copy of that exclusion list (maps.js's own inspector, not lights_map.js's row rendering) that 0.38.50 missed.
+- **Changed:** the class relabeled Emergency in the Atlas filter chip, the room/floor aggregate sheet's summary line, the shape legend and the read-only state tooltip — reads as urgent at a glance, matching the bright red ring it draws. The underlying device_class ("moisture"), code series (K-series) and everything else from 0.38.50 are unchanged.
+
+---
+
 ## 0.38.50 — Flood sensors, with a bright red ring radiating out while wet (2026-09-18)
 
 ### Flood sensors
