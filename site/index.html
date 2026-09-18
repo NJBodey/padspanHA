@@ -176,6 +176,21 @@ footer .links{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin
 
     <div class="relitem">
       <div class="relhead">
+        <span class="relver">v0.38.52</span>
+        <span class="pill soon">Beta channel</span>
+        <span class="reldate">19 September 2026</span>
+      </div>
+      <div class="relbody">
+        <ul>
+          <li><b>Added:</b> an active flood alarm now latches — stays alarming for 2 days, or until someone resets it on the Atlas map, whichever comes first — instead of clearing the instant the sensor itself reports dry. Verified live against a real leak: a moisture sensor flapped on/off in a tight ~0.55s rhythm across three separate bursts, well under what a point-in-time state check or poll interval could reliably catch; only an event listener catching every transition (not raw <code>state</code>) sees a burst that short. A sensor that re-triggers while already latched keeps its ORIGINAL trigger time rather than extending the window (the ISA-18.2/NFPA-72 convention: an active alarm keeps its first occurrence).</li>
+          <li><b>Changed:</b> the flood ripple on Atlas is now a wavy, 7-lobed scalloped shape that grows out to the room's real edges and slowly rotates — three fast staggered ripples while actually wet, one slower ripple while latched-but-dry — replacing the plain expanding circles, which read too similarly to the motion sensor's pulse.</li>
+          <li><b>Added:</b> every row showing a flood sensor (the device table, the room/floor tap sheet) now reads WET / ALARM / DRY, with a two-click-confirm Reset button once latched — matching the same confirm pattern already used for untagging a BLE device. Room/floor "⚠ Emergency" counts (renamed from "Flood") now include latched sensors, not just live-wet ones.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="relitem">
+      <div class="relhead">
         <span class="relver">v0.38.51</span>
         <span class="pill soon">Beta channel</span>
         <span class="reldate">18 September 2026</span>
