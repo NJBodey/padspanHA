@@ -4,6 +4,13 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.54 — Fix: flood alarms never actually latched (2026-09-19)
+
+### Flood sensors
+- **Fixed:** the flood latch's event listener was registered as a lambda wrapping its `@callback`-marked handler. Home Assistant's dispatcher only recognizes the marker on the exact function object it was applied to — a lambda wrapping it is a different, unmarked function, so HA ran it on a worker thread instead of the event loop. The handler's `hass.async_create_task` call is only legal from the event loop, so every single trigger crashed with "calls hass.async_create_task from a thread other than the event loop" and the latch write silently never happened. In practice: a flood sensor's ripple would draw for as long as the raw sensor reported wet and vanish the instant it flickered off, the 2-day latch never engaged, and the emergency banner never had anything to show — confirmed live, `flood_latches` stayed `{}` in the settings store through repeated real trips. Switched the registration to `functools.partial(_on_state_changed, hass)`, which HA's dispatcher correctly unwraps to find the marker. No other flood behavior changed.
+
+---
+
 ## 0.38.53 — An always-visible emergency-resets banner (2026-09-19)
 
 ### Flood sensors
