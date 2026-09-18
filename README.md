@@ -126,6 +126,19 @@ For devices where you can't get an IRK, the experimental **MAC Rotation Bridging
 - HA entities: **area sensors**, **distance sensors**, **device trackers**, **binary sensors**
 - Full WebSocket API for custom dashboards and automation
 
+### Atlas — The Device Map
+Formerly "Lights" — renamed because it outgrew the name. One isometric map of every floor, drawn the way an electrician draws a lighting plan, for placing and controlling real devices rather than just tracking BLE:
+- **Fixtures** — lights, fans, locks, and motion, temperature, humidity and air-quality sensors, each placed at their real position, shape, size and rotation
+- **WLED control** — brightness, colour and effects live from the map
+- **Outdoor gear** — anything HA puts on an Outside floor (shed, garden, driveway) places on the real floor plate just outside the room it lives beside, instead of falling off the map
+- **Doors & windows** as real RF barriers — material-aware attenuation (steel blocks harder than hollow-core), live open/closed state, and an **Invert** toggle for a sensor that reports backwards
+- **Automorph** — a soft aura grown from a fixture into its room, in a growing set of distinct styles (Glow, Blueprint, Nebula, Halo, Bloom and more)
+- **Showcase** — 19 curated visual themes for the map itself, with a presets bar to save and load a look
+- A **hover HUD** names what's under the cursor (or a touch hold) with every stacked marker as a clickable row; **Alt+click** cycles the stack when several devices sit on top of each other
+- Full touch support — pinch-zoom, drag and tap are tuned for a wall panel or phone, not just a mouse
+
+See the [Atlas Guide](docs/ATLAS_GUIDE.md) for a full walkthrough. Placement, Automorph and Showcase are PadSpan Pro (or [PadSpan Bright Pro](https://github.com/gbroeckling/padspanBright)) features — see [Editions](#editions) below; a free install still gets floors, rooms and a tap-to-toggle marker per light.
+
 ### UI & Experience
 - **Pure Live mode** — immersive full-screen 3D dashboard with pan/zoom, floating glass overlays, and collapsible info panels
 - **24 dedicated views** with Basic and Advanced modes
@@ -189,11 +202,11 @@ nothing to reconfigure.
 | Edition | Key | What it is |
 |---------|:---:|------------|
 | **PadSpan HA** | none | Everything above, free forever. |
-| **PadSpan Pro** | `pro` | Every gated feature in PadSpan HA — light placement (shape, size, angle, WLED, Showcase), Forensics, and anything gated later. |
-| [**PadSpan Bright**](https://github.com/gbroeckling/padspanBright) | none | A separate, lighter HACS listing generated from this same source — just the lighting map, for anyone who wants light control without the BLE presence tracking. |
-| **PadSpan Bright Pro** | `bright` | Bright's full lighting toolset (placement, shapes, WLED, Showcase), priced separately from PadSpan Pro. |
+| **PadSpan Pro** | `pro` | Every gated feature in PadSpan HA — Atlas device placement (shape, size, angle, WLED, Automorph, Showcase), Forensics, and anything gated later. |
+| [**PadSpan Bright**](https://github.com/gbroeckling/padspanBright) | none | A separate, lighter HACS listing generated from this same source — just the Atlas device map, for anyone who wants light control without the BLE presence tracking. |
+| **PadSpan Bright Pro** | `bright` | Bright's full Atlas toolset (placement, shapes, WLED, Automorph, Showcase), priced separately from PadSpan Pro. |
 
-A PadSpan Pro key also unlocks Bright's tools if you install Bright instead — one key, either download. Pricing and purchase: [padspan.traks.ca](https://padspan.traks.ca).
+No key yet? **Settings → Features → PadSpan licence** has a one-time 3-month free trial — no card required, no reinstall. A PadSpan Pro key also unlocks Bright's tools if you install Bright instead — one key, either download. Pricing and purchase: [padspan.traks.ca](https://padspan.traks.ca).
 
 ---
 
@@ -242,6 +255,7 @@ A PadSpan Pro key also unlocks Bright's tools if you install Bright instead — 
 |-------|-------------|
 | [Getting Started](docs/GETTING_STARTED.md) | First 30 minutes: install, explore, track |
 | [Floor Plan Setup](docs/FLOOR_PLAN_SETUP.md) | Upload, draw rooms, place scanners, set scale |
+| [Atlas Guide](docs/ATLAS_GUIDE.md) | The device map: placing fixtures, doors/locks/sensors, Automorph, Showcase |
 | [Troubleshooting](docs/90_TROUBLESHOOTING.md) | Common issues and fixes |
 | [Architecture](docs/00_REPO_LOGIC_OVERVIEW.md) | High-level codebase architecture |
 | [WebSocket API](docs/02_WEBSOCKET_API.md) | API reference for custom integrations |
