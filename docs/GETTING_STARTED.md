@@ -2,6 +2,8 @@
 
 This guide walks you through your first 30 minutes with PadSpan — from install to tracking your first device across rooms.
 
+> **Just here for light control, no BLE presence tracking?** This whole guide is about the BLE tracking side. Skip to the [Atlas Guide](ATLAS_GUIDE.md) instead — that's the device map (lights, fans, sensors, locks, doors) and it works the same whether you're on PadSpan HA or [PadSpan Bright](https://github.com/gbroeckling/padspanBright).
+
 ## Prerequisites
 
 - Home Assistant **2024.1** or newer
@@ -134,6 +136,7 @@ Record the real headcount in the view to keep it beside what the estimate said.
 
 ## What's Next?
 
+- **Atlas** — Place lights, fans, sensors, locks and doors on the same map (Pro feature) — see the [Atlas Guide](ATLAS_GUIDE.md)
 - **Calibration** — Run the calibration walkthrough (Training Hub → Calibration) for sub-room accuracy
 - **Basic vs Advanced** — Toggle between simplified and full views (top-right toggle)
 - **Training Hub** — 14 animated walkthroughs covering every feature
