@@ -5,10 +5,6 @@ confirmation that I am on the right path, and where the gaps are. Do a
 ton of research and build a phase 2 plan for me to review. Really dig
 for this one, even outside HA if you need for ideas."
 
-This document is being written incrementally and committed as it fills
-in — treat an unfinished section below as "not started yet," not as a
-finding.
-
 **Companion doc:** [PROJECT_SYNOPSIS.md](PROJECT_SYNOPSIS.md) is the
 day-1 (2026-02-04) founding vision. Section 1 below measures the
 7.5-month delta between that and what's actually shipped — the most
@@ -16,29 +12,39 @@ direct answer to "am I on the right path."
 
 ---
 
-## Status
+## Status: research complete
 
-`[IN PROGRESS — multiple research angles running/committing in parallel;
-see the per-section notes below for which angles are in]`
+Built from 8 independent research passes running concurrently against
+this same file. That concurrency briefly cost real content (one pass's
+in-progress work was overwritten by another mid-session, caught and
+restored from git history) and left every pass's added Gaps/Phase-2
+items numbered as if it were the only one landing — both cleaned up in
+a consolidation pass afterward (renumbered §4/§5 items so nothing
+collides, relettered §7's research subsections from a second, colliding
+A-J sequence to M-P so every lettered subsection in the document is now
+globally unique). No findings were changed or removed in that pass, only
+organized. Flagged here rather than silently fixed, per this project's
+own rule to say what actually happened.
 
-**Note on §J-L (2026-09-18, late pass):** an earlier parallel edit to this
-file briefly overwrote the in-progress numbered §3.1-§3.7 research (alarm/
-alert deep-dive, analytics, HA-roadmap angles) with a differently-structured
-draft before it was committed — a collision from several agents editing this
-same file concurrently without locking. Most content survived because later
-commits built on top of it; the alarm/alert architecture deep-dive
-(§J-L below, old §3.1-3.3), and its gaps/plan (§4.8, Phase 2h) did not and
-have been restored verbatim from git history (commit `1fa8d5fb`) into their
-new position in this lettering scheme. Flagged here rather than silently
-patched, per the project's own rule to say what actually happened.
+**Contents:**
+1. Where this project actually stands today
+2. Are you on the right path? — direct verdict, updated at the bottom
+   after §§6-8 landed to cover pricing and product-gap findings too, not
+   just architecture
+3. External research findings — §A-F: AI-paired solo-dev velocity/debt
+   literature; §G: is PadSpan at risk from HA's own direction; §H:
+   BMS/RTLS/digital-twin analytics-depth; §I: named comparables for the
+   registry fix; §J-L: alarm/alert subsystem architecture
+4. Gaps — 4.1-4.13, ranked by leverage
+5. Phase 2 plan — 2a through 2r, ordered
+6. Outside HA: the BMS/digital-twin category (§M-P live inside §7, not
+   here — see below)
+7. Monetization & pricing — an independent second lens on "am I on the
+   right path," §M-P
+8. Outside HA, consumer/luxury tier: digital-twin-of-a-home competitive
+   landscape
 
-1. Where this project actually stands today — `[DONE]`
-2. Are you on the right path? (direct verdict) — `[PENDING — written last, after all angles below]`
-3. External research findings — `[IN PROGRESS: 3.1-3.3 alarm/alert angle done; 3.4 analytics-depth angle done; 3.5 monetization/pricing angle done; other angles may still land]`
-4. Gaps — `[IN PROGRESS: 4.1 alarm/alert done; 4.2 analytics depth done; 4.3 monetization/pricing done]`
-5. Phase 2 plan — `[IN PROGRESS: 5.1 alarm engine done; 5.2 analytics depth done; 5.3 monetization/pricing done]`
-
-**On the research method below, for calibration:** built from live web
+**On the research method throughout, for calibration:** built from live web
 search, direct page fetches, and — for long-standing, stable facts about
 named products (GPL terms, WordPress's freemium norm, Fowler's
 refactoring catalog) — existing knowledge, since live search on those
@@ -222,6 +228,44 @@ invisible to the person it's happening to. This isn't a finding — there's
 no way to verify it from outside the review process — but given the pace,
 it's worth Garry answering for himself, honestly, before it becomes a
 finding in a future retro.
+
+**Updated after §§6-8 (outside-HA, monetization, and digital-twin-
+competitive angles) landed — four separate yes/no questions, not one,
+because "am I on the right path" turned out to have four independent
+answers once the research was this thorough:**
+
+1. **Is the product-as-built the right thing to be building?** Yes,
+   confirmed independently at three market tiers researched (§G, §M
+   verdicts) — no HA-ecosystem, BMS, or consumer/luxury competitor
+   combines PadSpan's specific bundle, and HA's own roadmap has
+   explicitly scoped this territory out of its own core work.
+2. **Is the codebase sound underneath that product?** Yes, with one
+   correctable architecture debt already identified above (the
+   device-class registry) — the test-to-source ratio and the closed-loop
+   Automorph critique are real, working evidence of good instincts, not
+   just fast ones.
+3. **Is the pricing/packaging structure sound?** **No** — this is the one
+   place in the whole report where the honest answer isn't "yes, with a
+   fix," it's closer to "no, fix this before it costs conversions." §P's
+   verdict: 5 price points across 2 products is past where buyers reason
+   cleanly, and the architecture itself (BLE is already optional
+   infrastructure in both products) undercuts the reason there are two
+   products at all. Phase 2l-2m address it directly and it's cheap to
+   fix — positioning, not a rebuild.
+4. **Is there a product gap bigger than the next device class?** Yes, and
+   it's not architectural — §8's verdict is that automated geometry
+   acquisition (scan-to-place, not another sensor type) is the single
+   most research-validated gap in this entire report, found independently
+   at every competitor tier from Samsung to Apple's own dormant RoomPlan
+   API.
+
+**Net verdict across the whole report:** the trajectory and the codebase
+are sound; the go-to-market packaging is not, and there's a bigger
+missing feature than whatever's next on the device-class list. None of
+these four answers contradict each other — they're four different axes
+(architecture, positioning, pricing, product surface), and Phase 2 below
+sequences fixes for all four rather than treating only the architecture
+one as "the" finding.
 
 ---
 
@@ -1383,33 +1427,33 @@ quality — and nothing in this repo shows it's been checked for.
   whitespace.
 
 **Added to the gap list (§4), not duplicating it:**
-- **4.7 — No independent security review**, against the documented
+- **4.9 — No independent security review**, against the documented
   HACS third-party-integration vulnerability class, given PadSpan now
   controls locks and holds alarm state. Doesn't need to be a paid audit
   to start — a self-run pass against HA's own custom-integration
   security guidance and the GitHub Security Lab's published methodology
   beats the current "no review" state.
-- **4.8 — Occupancy-analytics confidence framing is unverified**, not
+- **4.10 — Occupancy-analytics confidence framing is unverified**, not
   confirmed broken. Whether Busy Times/Insights present any
   uncertainty framing on peak-occupancy/dwell-time numbers wasn't
   checked against the live UI in this pass — a five-minute look, not a
   research question.
-- **4.9 — "Residential-scale BMS" positioning is unvalidated by usage
+- **4.11 — "Residential-scale BMS" positioning is unvalidated by usage
   data.** No incumbent surfaced combining PadSpan's four pillars, but
   external research can't distinguish genuine whitespace from untested
   demand — only PadSpan's own install-base adoption data can.
 
 **Added to the Phase 2 plan (§5), sequenced after Phase 2a-2c:**
-- **Phase 2g — Independent security pass** (addresses 4.7): file/
+- **Phase 2i — Independent security pass** (addresses 4.9): file/
   service-access-boundary review specifically, before the next feature
   that touches locks or alarm state.
-- **Phase 2h — Instrument or survey feature adoption** (addresses 4.9):
+- **Phase 2j — Instrument or survey feature adoption** (addresses 4.11):
   presence-only vs. Atlas/Locate/Busy-Times/flood-alarm usage among
   current installs — the only available test for whether the
   residential-BMS breadth is earning its ~25-edit-per-feature cost, or
   running ahead of demand.
-- **Phase 2i — Check Busy Times/Insights against the Density
-  confidence-framing bar** (addresses 4.8): either already there, in
+- **Phase 2k — Check Busy Times/Insights against the Density
+  confidence-framing bar** (addresses 4.10): either already there, in
   which case this closes in five minutes, or a small, well-scoped UI
   addition.
 
@@ -1450,7 +1494,7 @@ sub-questions below are marked **unverified live** and reasoned from
 direct fetches plus general knowledge instead, flagged rather than
 presented as confirmed.
 
-### G. Monetization precedent inside the HA/HACS ecosystem specifically
+### M. Monetization precedent inside the HA/HACS ecosystem specifically
 
 **HACS's own stated position is that it is a free, open-source
 distribution mechanism, full stop.** The HACS 2.0 announcement is
@@ -1465,7 +1509,7 @@ HACS itself contemplates. That's not forbidden, but it also means
 there's no existing HACS-native UX pattern users already trust for
 "this free-looking install needs a paid key," the way a WordPress.org
 plugin's "Upgrade to Pro" notice is now a familiar, trusted pattern
-(§H below).
+(§N below).
 
 **The two clearest examples of real money moving in the HA ecosystem are
 both recurring *hosted services*, not feature-unlock licenses:**
@@ -1486,7 +1530,7 @@ provider* (bandwidth, retraining, hosting) — the argument this community
 visibly accepts. **PadSpan Pro charges to unlock features in code that,
 once downloaded, runs entirely on the user's own hardware with no
 ongoing per-user cost** — structurally closer to a WordPress Pro-plugin
-unlock (§H) than to Nabu Casa or Frigate+, but without WordPress's
+unlock (§N) than to Nabu Casa or Frigate+, but without WordPress's
 decade of user habituation to that pattern inside *this specific*
 community. That mismatch — paying for local software vs. paying for an
 ongoing service — is very likely the real fault line this community's
@@ -1522,7 +1566,7 @@ against, fair or not. **Unverified live:** a specific, named
 r/homeassistant thread reacting to a paid custom integration (or to
 PadSpan Pro itself) — worth a direct, targeted follow-up search.
 
-### H. Outside HA: the closest working analog is WordPress plugin freemium — and it's proven, with one structural mismatch
+### N. Outside HA: the closest working analog is WordPress plugin freemium — and it's proven, with one structural mismatch
 
 The closest real precedent to PadSpan's shape is not in home automation
 at all — it's the WordPress plugin ecosystem, running exactly this
@@ -1551,13 +1595,13 @@ free/Pro relationship per plugin; PadSpan has built two products, each
 with its own free/Pro split, sharing most of their code. **The
 WordPress precedent validates PadSpan HA → PadSpan Pro. It does not
 obviously validate a second product (Bright/Bright Pro) existing
-alongside the first** — see §J.
+alongside the first** — see §P.
 
 **A second, less-close analog: Craft CMS's official Plugin Store**,
 where paid plugins are normalized and sold *through the platform*
 (revenue share, built-in licensing, price shown next to free plugins) —
 closer to an app-store model than WordPress's off-site sales. HACS
-offers none of this (§G) — there's no in-platform payment rail for HA
+offers none of this (§M) — there's no in-platform payment rail for HA
 integrations the way Craft (or Shopify's App Store, or Figma's plugin
 marketplace, per general knowledge) provide. That's a real structural
 handicap: PadSpan does 100% of its own trust-building and payment UX
@@ -1583,7 +1627,7 @@ Obsidian-shaped community — is a real, named risk, not a reason not to
 charge: it means don't assume WordPress's *success rate* transfers, only
 its *mechanics*.
 
-### I. Pricing-tier psychology: is the $45/$35/$12, 2-product×2-tier matrix well-designed?
+### O. Pricing-tier psychology: is the $45/$35/$12, 2-product×2-tier matrix well-designed?
 
 General SaaS/indie-pricing research converges on a few well-replicated
 findings, plus one classic finding that's shakier than its reputation:
@@ -1617,9 +1661,9 @@ literature doesn't model at all, because it's not a normal SaaS shape;
 it's closer to "two SKUs, each with their own tiers," which is a
 *product-line* problem (reduce the number of product lines), not a
 *pricing-ladder* problem (reduce the number of tiers) — and the fix for
-the two isn't the same fix. See §J.
+the two isn't the same fix. See §P.
 
-### J. Explicit confirm/challenge callouts (monetization angle)
+### P. Explicit confirm/challenge callouts (monetization angle)
 
 - **CHALLENGES the current structure directly:** no example found,
   inside or outside HA, of a healthy 2-product × 2-tier + cross-upgrade
@@ -1635,14 +1679,14 @@ the two isn't the same fix. See §J.
   is very likely adding SKU count without adding real user-facing
   distinctiveness. **This is the single highest-leverage pricing change
   available:** collapsing to one product fixes both the tier-count
-  problem (§I) and the product-identity ambiguity in one move.
+  problem (§O) and the product-identity ambiguity in one move.
 - **CONFIRMS Garry can charge for this at all:** WordPress's freemium
   plugin economy is a genuine, decade-proven existence case that a
   free-core + paid-Pro-addon model works for exactly this shape of
   product (a plugin extending a bigger free platform). The mechanics are
   sound and battle-tested.
 - **CHALLENGES whether *this specific community* will respond to it the
-  way WordPress users do:** Home Assistant's culture (§H, §G) skews
+  way WordPress users do:** Home Assistant's culture (§N, §M) skews
   toward Obsidian's donation-first norm, not WordPress's buy-first norm.
   The framing on the pricing page ("this funds continued development,"
   not "the free version is missing things") likely matters more here
@@ -1662,12 +1706,12 @@ the two isn't the same fix. See §J.
 
 ### Gaps (monetization angle)
 
-1. **No ecosystem precedent for this exact monetization shape** — §G.
+1. **No ecosystem precedent for this exact monetization shape** — §M.
    Not disqualifying (someone has to be first), but it means PadSpan is
    validating a go-to-market pattern with no comparable data point to
    check pricing or backlash-risk against, on top of validating the
    product itself.
-2. **Two products where the architecture suggests one.** §J — the
+2. **Two products where the architecture suggests one.** §P — the
    Bright/Pro split doesn't track a real architectural boundary anymore
    (if it ever did); it currently tracks a marketing decision layered on
    top of what the codebase actually treats as one optional module
@@ -1676,14 +1720,14 @@ the two isn't the same fix. See §J.
 3. **5 price points is past the point pricing research says buyers
    reason cleanly through**, and that's before accounting for the
    extra "which product" decision this specific structure adds on top
-   (§I).
+   (§O).
 4. **No public "why does this cost money" framing was found or
-   evaluated** — given §G/§H's finding that this community responds
+   evaluated** — given §M/§N's finding that this community responds
    better to "funds continued development" framing than to
    feature-paywall framing, and no evidence either way was gathered on
    what PadSpan's actual pricing page currently says.
 5. **GPLv3-vs-license-gate compliance is an open, unchecked question**
-   (§J) — not urgent, but unresolved, and cheap to resolve once with a
+   (§P) — not urgent, but unresolved, and cheap to resolve once with a
    qualified read rather than carried indefinitely.
 6. **No visible support/refund/trial policy was found or evaluated**
    for the paid tiers — flagged as *unknown*, not *absent*; a real gap
@@ -1691,7 +1735,7 @@ the two isn't the same fix. See §J.
 
 ### Phase 2 plan additions (monetization angle)
 
-**M1 — Resolve the Bright/HA product-identity question before touching
+**Phase 2l — Resolve the Bright/HA product-identity question before touching
 any price numbers.** Decide explicitly: is BLE presence the flagship,
 with Atlas/Automorph/flood/Locate/Busy Times as its dependents (in which
 case Bright shouldn't be a separate product — it's a subset, and
@@ -1705,27 +1749,27 @@ decision, the number of separately-branded HACS listings and the number
 of price points can both be stated in one sentence a new user could
 repeat back correctly.
 
-**M2 — Collapse to the fewest tiers M1's answer actually requires** —
-very likely 2 (free/Pro) if M1 lands on "one product," matching the
-well-supported "3 tiers max, ideally fewer" finding in §I, rather than
+**Phase 2m — Collapse to the fewest tiers 2l's answer actually requires** —
+very likely 2 (free/Pro) if 2l lands on "one product," matching the
+well-supported "3 tiers max, ideally fewer" finding in §O, rather than
 leaning on decoy-tier tricks whose evidence base is weaker than
 reputation suggests. *Verify:* a first-time visitor to the pricing page
 can state which one price applies to them without asking a question.
 
-**M3 — Rewrite the pricing/upgrade page copy around "sustaining
+**Phase 2n — Rewrite the pricing/upgrade page copy around "sustaining
 continued development of something already this deep,"** not "the free
 version is missing things" — cheapest item on this list, no code
-required, directly targets the community-fit risk in §H/§J.
+required, directly targets the community-fit risk in §N/§P.
 
-**M4 — Get a GPLv3-vs-license-gate read from someone qualified, once,
-in writing** (§J item 5) — stop carrying it as an open question rather
+**Phase 2o — Get a GPLv3-vs-license-gate read from someone qualified, once,
+in writing** (§P item 5) — stop carrying it as an open question rather
 than resolving it.
 
-**M5 — Once M1-M2 ship, go get the specific market data this pass
+**Phase 2p — Once 2l-2m ship, go get the specific market data this pass
 couldn't:** search r/homeassistant and the HA forum specifically for
 reactions to PadSpan Pro itself (not generic precedent), and re-run "does
 any comparable paid HACS integration exist" with a fresh search budget
-rather than trusting §G's moderate-confidence null result indefinitely.
+rather than trusting §M's moderate-confidence null result indefinitely.
 
 **Bottom line, monetization angle:** the mechanics of charging for a
 free-core/paid-Pro HA integration are proven elsewhere (WordPress) and
@@ -1735,11 +1779,11 @@ more complex than either this community's own monetization precedent
 (none found at this shape) or general pricing-tier research supports,
 and — separately from the architecture question §§2-5 already answered
 well — it's the one part of "am I on the right path" this report can't
-say yes to without a change. The fix (M1-M2) is a positioning and
+say yes to without a change. The fix (Phase 2l-2m) is a positioning and
 packaging decision, not a rebuild: collapsing Bright into a BLE toggle
 inside one product removes a SKU axis pricing research says is actively
 costing conversions, and resolves an identity question the codebase
-itself has already been signaling isn't clean (§4.3/§J).
+itself has already been signaling isn't clean (§4.3/§P).
 
 
 ---
@@ -1885,25 +1929,25 @@ TrueImage's photo-as-control-surface paradigm deserves a deliberate
 stance rather than remaining an unconsidered option.
 
 **Added to the gap list (§4), continuing the numbering:**
-- **4.10 — No automated geometry-acquisition path for Atlas placement.**
+- **4.12 — No automated geometry-acquisition path for Atlas placement.**
   100% manual cm entry today; every serious competitor researched has at
   least one automated capture path. The single most research-validated
   gap in this entire report across all angles.
-- **4.11 — "Digital twin" as unqualified self-description invites two
+- **4.13 — "Digital twin" as unqualified self-description invites two
   avoidable category collisions** — with predictive-simulation twins
   (PadSpan has no forward/what-if capability) and with Digs' static
   property-record twin (same phrase, unrelated product) — for no benefit
   to the actual pitch.
 
 **Added to the Phase 2 plan (§5):**
-- **Phase 2j — Scan-to-place: a RoomPlan-based capture companion for
-  Atlas** (addresses 4.10). Spec/prototype a flow where a user scans a
+- **Phase 2q — Scan-to-place: a RoomPlan-based capture companion for
+  Atlas** (addresses 4.12). Spec/prototype a flow where a user scans a
   room once with a LiDAR iPhone/iPad via Apple's free RoomPlan API,
   exports wall/door/window geometry, and Atlas ingests it as a starting
   placement to fine-tune rather than build from a blank canvas. *Verify:*
   scan one real room, measure time-to-usable-placement against the
   current manual workflow for the same room.
-- **Phase 2k — Positioning correction** (addresses 4.11): drop
+- **Phase 2r — Positioning correction** (addresses 4.13): drop
   unqualified "digital twin" from README/marketing copy in favour of the
   language that claims PadSpan's actually-undefended territory
   (BLE-fused, centimetre-accurate, live device *and* presence map).
