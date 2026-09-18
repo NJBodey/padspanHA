@@ -176,6 +176,19 @@ footer .links{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin
 
     <div class="relitem">
       <div class="relhead">
+        <span class="relver">v0.38.50</span>
+        <span class="pill soon">Beta channel</span>
+        <span class="reldate">18 September 2026</span>
+      </div>
+      <div class="relbody">
+        <ul>
+          <li><b>Added:</b> flood/water-leak sensors join the Atlas map as their own class (K-series codes, bright red glyph) — placed, moved and selected exactly like motion, temperature, humidity or air quality. HA's own device_class for this is "moisture". A wet sensor draws a bright red ring radiating outward from its placed point, sweeping through its room — the same "make the room react" idea air quality's rising bars use, but binary rather than a graded scale: either wet right now, or nothing drawn at all. A room or floor with an active flood sensor calls it out in its aggregate sheet's summary line ("⚠ Flood ×N"), the same way Motion and Air already do. Deliberately excluded from the stuck-state health check motion and door/window get: an ongoing leak *should* keep alarming for hours, not get quietly flagged as "probably a hardware fault."</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="relitem">
+      <div class="relhead">
         <span class="relver">v0.38.49</span>
         <span class="pill soon">Beta channel</span>
         <span class="reldate">18 September 2026</span>
