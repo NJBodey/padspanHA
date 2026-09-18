@@ -4,6 +4,15 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.52 — Flood alarm latching: 2 days or until reset (2026-09-19)
+
+### Flood sensors
+- **Added:** an active flood alarm now latches — stays alarming for 2 days, or until someone resets it on the Atlas map, whichever comes first — instead of clearing the instant the sensor itself reports dry. Verified live against a real leak: a moisture sensor flapped on/off in a tight ~0.55s rhythm across three separate bursts, well under what a point-in-time state check or poll interval could reliably catch; only an event listener catching every transition (not raw `state`) sees a burst that short. A sensor that re-triggers while already latched keeps its ORIGINAL trigger time rather than extending the window (the ISA-18.2/NFPA-72 convention: an active alarm keeps its first occurrence).
+- **Changed:** the flood ripple on Atlas is now a wavy, 7-lobed scalloped shape that grows out to the room's real edges and slowly rotates — three fast staggered ripples while actually wet, one slower ripple while latched-but-dry — replacing the plain expanding circles, which read too similarly to the motion sensor's pulse.
+- **Added:** every row showing a flood sensor (the device table, the room/floor tap sheet) now reads WET / ALARM / DRY, with a two-click-confirm Reset button once latched — matching the same confirm pattern already used for untagging a BLE device. Room/floor "⚠ Emergency" counts (renamed from "Flood") now include latched sensors, not just live-wet ones.
+
+---
+
 ## 0.38.51 — Flood sensor filter fix, and the class relabeled Emergency (2026-09-18)
 
 ### Flood sensors
