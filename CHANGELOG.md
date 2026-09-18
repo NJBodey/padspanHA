@@ -4,6 +4,13 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.53 — An always-visible emergency-resets banner (2026-09-19)
+
+### Flood sensors
+- **Added:** a sidebar banner listing every currently-latched flood alarm by name, with its own two-click-confirm Reset button — visible regardless of which tab is open, instead of only wherever the sensor's own row happens to appear. Hidden entirely when nothing is latched. A matching red pill (🚨 N) in the mobile topbar covers phone/kiosk views where the sidebar is usually collapsed.
+
+---
+
 ## 0.38.52 — Flood alarm latching: 2 days or until reset (2026-09-19)
 
 ### Flood sensors
