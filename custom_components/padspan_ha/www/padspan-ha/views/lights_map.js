@@ -12,7 +12,7 @@
 // what an interaction does (sidebar: control the light — tab: place it).
 
 const { buildIsoSVG, shapeSvg, fabricFrame, sampleSceneField, pointInPolygon, offsetPolygonInward,
-        lightClassOf, SHOWCASE_THEMES, AUTOMORPH_STYLE_LABELS } =
+        lightClassOf, SHOWCASE_THEMES, AUTOMORPH_STYLE_LABELS, floodLatchActive } =
   await import(`./iso_lights.js${new URL(import.meta.url).search}`);
 const { assignLightCodes, resolveLightShape, LIGHT_SHAPES, LIGHT_TYPE_OVERRIDES,
         WLED_BORDER, PARTITION_BORDER, FAN_BORDER, MOTION_BORDER, TEMP_BORDER, LOCK_BORDER, DOOR_BORDER, healthOf,
@@ -174,7 +174,7 @@ export function airQualityLabel(l){
 // What a room sheet says: lights and fans counted SEPARATELY (so "all off"
 // is never ambiguous about the fan), motion summarised. The eids handed back
 // are what the aggregate actions act on.
-export function roomAggregate(lights, roomName){
+export function roomAggregate(lights, roomName, floodLatches){
   const here = (lights || []).filter(l => l.area_name === roomName);
   const lightsHere = here.filter(l => lightClassOf(l) === "light" || lightClassOf(l) === "strip");
   const fansHere = here.filter(l => l.isFan);
@@ -188,8 +188,11 @@ export function roomAggregate(lights, roomName){
     motionActive: motionHere.filter(l => l.state === "on").length, motionTotal: motionHere.length,
     // Air quality: the worst reading in the room (NaN = none reporting).
     airTotal: airHere.length, airWorst: airWorstOf(airHere),
-    // Flood: binary, not a badness scale — how many are actively wet right now.
-    floodTotal: floodHere.length, floodActive: floodHere.filter(l => l.state === "on").length,
+    // Flood: binary, not a badness scale — how many are actively alarming
+    // right now, live OR latched (flood_latch.py) — a sensor that dried out
+    // but is still within its 2-day window must keep counting here, the
+    // same reasoning as the ALARM label in openAggregateSheet/buildLightsTable.
+    floodTotal: floodHere.length, floodActive: floodHere.filter(l => floodIsAlarming(l, floodLatches)).length,
     lightEids: lightsHere.map(l => l.entity_id), fanEids: fansHere.map(l => l.entity_id),
     all: here,
   };
@@ -224,7 +227,7 @@ export function lightFloorId(l, model){
   if (p && p.floor_id) return String(p.floor_id);
   return roomFid;
 }
-export function floorAggregate(lights, model, floorId){
+export function floorAggregate(lights, model, floorId, floodLatches){
   const here = (lights || []).filter(l => lightFloorId(l, model) === String(floorId));
   const lightsHere = here.filter(l => lightClassOf(l) === "light" || lightClassOf(l) === "strip");
   const fansHere = here.filter(l => l.isFan);
@@ -234,7 +237,8 @@ export function floorAggregate(lights, model, floorId){
     fansOn: fansHere.filter(l => l.state === "on").length, fansTotal: fansHere.length,
     motionActive: here.filter(l => l.isMotion && l.state === "on").length,
     airTotal: here.filter(l => l.isAir).length, airWorst: airWorstOf(here.filter(l => l.isAir)),
-    floodTotal: here.filter(l => l.isFlood).length, floodActive: here.filter(l => l.isFlood && l.state === "on").length,
+    floodTotal: here.filter(l => l.isFlood).length,
+    floodActive: here.filter(l => l.isFlood && floodIsAlarming(l, floodLatches)).length,
     lightEids: lightsHere.map(l => l.entity_id), fanEids: fansHere.map(l => l.entity_id),
   };
 }
@@ -246,6 +250,15 @@ export function airWorstOf(airLights){
     if (Number.isFinite(b) && !(worst >= b)) worst = b;
   }
   return worst;
+}
+// One flood sensor's alarm state — live wet, OR still within its
+// flood_latch.py latch window. The single place this "live OR latched"
+// check lives, so the aggregate counts, the row labels and the Reset
+// button's visibility can never quietly disagree with each other.
+export function floodIsAlarming(l, floodLatches){
+  if (l.state === "on") return true;
+  const latch = (floodLatches || {})[l.entity_id];
+  return floodLatchActive(latch && latch.triggered_at, Date.now());
 }
 
 // ── Spread in room ───────────────────────────────────────────────────────────
@@ -765,8 +778,31 @@ export function openAggregateSheet(api, { title, sub, items, actions }){
       row.appendChild(mk("span", _S.state(on), on ? "OPEN" : "CLOSED"));
     } else if (l.isFlood) {
       // Read-only, same as door above — the red ring on the map already
-      // carries the alarm, this is just the word form of it.
-      row.appendChild(mk("span", _S.state(on), on ? "WET" : "DRY"));
+      // carries the alarm, this is just the word form of it. Latched
+      // (flood_latch.py) beats live state: a sensor that's dried out but
+      // is still within its 2-day alarm window reads ALARM, not DRY — the
+      // whole point of latching is not to look clear the moment it isn't.
+      const latch = (api.floodLatches || {})[l.entity_id];
+      const latched = floodLatchActive(latch && latch.triggered_at, Date.now());
+      row.appendChild(mk("span", _S.state(on || latched), on ? "WET" : (latched ? "ALARM" : "DRY")));
+      if (latched && api.onFloodReset) {
+        const wrap = mk("span");
+        const makeResetBtn = () => {
+          const b = mk("button", _S.act + ";padding:3px 10px;min-height:26px;font-size:10px", "Reset");
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            wrap.innerHTML = "";
+            const yes = mk("button", _S.act + ";padding:3px 10px;min-height:26px;font-size:10px;background:#7f1d1d;border-color:#dc2626;color:#fecaca", "Yes, clear it");
+            const no = mk("button", _S.act + ";padding:3px 10px;min-height:26px;font-size:10px", "No");
+            yes.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; api.onFloodReset(l.entity_id); });
+            no.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; wrap.appendChild(makeResetBtn()); });
+            wrap.appendChild(yes); wrap.appendChild(no);
+          });
+          return b;
+        };
+        wrap.appendChild(makeResetBtn());
+        row.appendChild(wrap);
+      }
     } else {
       const b = mk("button", _S.onoff(on), on ? "On" : "Off");
       b.addEventListener("click", (e) => {
@@ -791,7 +827,7 @@ export function openAggregateSheet(api, { title, sub, items, actions }){
 // The two sheets the map opens. setMany(eids, on) is the host's aggregate
 // action (optimistic, batched per domain).
 export function openRoomSheet(api, lights, room, onlyEids){
-  const agg = roomAggregate(lights, room);
+  const agg = roomAggregate(lights, room, api.floodLatches);
   const only = onlyEids ? new Set(onlyEids) : null;
   const items = agg.all.filter(l => !only || only.has(l.entity_id));
   const lightEids = agg.lightEids.filter(e => !only || only.has(e));
@@ -818,9 +854,9 @@ export function openFloorSheet(api, lights, model, z){
   const f = floors.find(x => Number(x.level) === Number(z));
   const fid = f ? String(f.id) : null;
   if (!fid) { api.toast("No floor record for this storey"); return; }
-  const agg = floorAggregate(lights, model, fid);
+  const agg = floorAggregate(lights, model, fid, api.floodLatches);
   const items = lights.filter(l => agg.lightEids.includes(l.entity_id) || agg.fanEids.includes(l.entity_id) || (l.isMotion && l.state === "on")
-    || (l.isAir && lightFloorId(l, model) === String(fid)) || (l.isFlood && l.state === "on" && lightFloorId(l, model) === String(fid)));
+    || (l.isAir && lightFloorId(l, model) === String(fid)) || (l.isFlood && floodIsAlarming(l, api.floodLatches) && lightFloorId(l, model) === String(fid)));
   const parts = [`Lights ${agg.lightsOn}/${agg.lightsTotal}`];
   if (agg.fansTotal) parts.push(`Fans ${agg.fansOn}/${agg.fansTotal}`);
   if (agg.motionActive) parts.push(`Motion ×${agg.motionActive}`);
@@ -1811,6 +1847,9 @@ export function buildLightsMapCard(hostIn){
         // default (Garry, 2026-09-09: "should be selectable, and off by
         // default") — showBeacons is the opt-in.
         beacons: host.showBeacons ? (host.beacons || null) : null,
+        // {entity_id: epoch-s of its most recent "on"} — flood_latch.py.
+        // Ungated: a flood alarm is safety-relevant, not a paid convenience.
+        floodLatches: host.floodLatches || {},
         automorph: !!host.automorph,
         automorphRoomPct: view.automorphLivePct !== undefined ? view.automorphLivePct : (host.automorphRoomPct || 0),
         automorphHardness: view.automorphLiveHardness !== undefined ? view.automorphLiveHardness : (host.automorphHardness || 0),
@@ -2661,7 +2700,30 @@ export function buildLightsTable(host, lights){
         : l.isDoor
         ? el("span", { class: `lv-state ${on ? "on" : "off"}` }, on ? "OPEN" : "CLOSED")
         : l.isFlood
-        ? el("span", { class: `lv-state ${on ? "on" : "off"}`, title: "Emergency (flood) — read-only" }, on ? "WET" : "DRY")
+        ? (() => {
+            // Latched (flood_latch.py) beats live state — see the room/floor
+            // sheet's identical reasoning in openAggregateSheet.
+            const latch = (host.floodLatches || {})[l.entity_id];
+            const latched = floodLatchActive(latch && latch.triggered_at, Date.now());
+            const stateSpan = el("span", { class: `lv-state ${(on || latched) ? "on" : "off"}`, title: "Emergency (flood) — read-only" }, on ? "WET" : (latched ? "ALARM" : "DRY"));
+            if (!latched || !host.onFloodReset) return stateSpan;
+            const wrap = el("span", { style: "margin-left:6px;display:inline-block" });
+            const makeResetBtn = () => {
+              const b = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px" }, "Reset");
+              b.addEventListener("click", (e) => {
+                e.stopPropagation();
+                wrap.innerHTML = "";
+                const yes = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px;background:#7f1d1d;border-color:#dc2626;color:#fecaca" }, "Yes, clear it");
+                const no = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px" }, "No");
+                yes.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; host.onFloodReset(l.entity_id); });
+                no.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; wrap.appendChild(makeResetBtn()); });
+                wrap.appendChild(yes); wrap.appendChild(no);
+              });
+              return b;
+            };
+            wrap.appendChild(makeResetBtn());
+            return el("span", {}, [stateSpan, wrap]);
+          })()
         : el("span", { class: `lv-state ${on ? "on" : "off"}` }, on ? "ON" : "OFF")),
       // Its own column, next to State (Garry, 2026-09-07: "we still need
       // another option next to state... a reassign to another device type

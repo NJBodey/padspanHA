@@ -227,6 +227,10 @@ class PadSpanLightsApp extends HTMLElement {
       // Quick-apply only (see onApplyPreset in the host below) — presets are
       // authored in Mapping -> Lights, this panel just switches between them.
       this.state._showcasePresets = Array.isArray(s.lights_showcase_presets) ? s.lights_showcase_presets : [];
+      // {entity_id: epoch-s of its most recent "on"} — flood_latch.py's
+      // event listener writes this server-side; ungated, same reasoning as
+      // the tier read above (a flood alarm isn't a paid convenience).
+      this.state._floodLatches = (s.flood_latches && typeof s.flood_latches === "object") ? s.flood_latches : {};
       // The effective tier the backend computed (licence.py). Below `bright`
       // the shared pipeline draws the free map — see lights_map.js. A settings
       // fetch that failed keeps the tier it last knew rather than flickering
@@ -372,6 +376,12 @@ class PadSpanLightsApp extends HTMLElement {
       setMany:(eids,on)=>this._setMany(eids,on),
       toast:(m,e)=>this._toast(m,e),
       rerender:()=>this._render(),
+      floodLatches: this.state._floodLatches || {},
+      onFloodReset: (eid)=>{
+        this._hass.callWS({ type: "padspan_ha/flood_reset", entity_id: eid })
+          .then(()=>this._render())
+          .catch((e)=>this._toast("Could not reset: " + String(e), true));
+      },
     };
     api.openRoom=(room, onlyEids)=>openRoomSheet(api, lights, room, onlyEids);
     api.openFloor=(z)=>openFloorSheet(api, lights, this.state.model, z);
@@ -604,6 +614,12 @@ class PadSpanLightsApp extends HTMLElement {
       onTableSort: (next)=>{ this.state._tableSort=next; this._render(); },
       tableHealthFilter: !!this.state._tableHealthFilter,
       onTableHealthFilter: (on)=>{ this.state._tableHealthFilter=on; this._render(); },
+      floodLatches: this.state._floodLatches || {},
+      onFloodReset: (eid)=>{
+        this._hass.callWS({ type: "padspan_ha/flood_reset", entity_id: eid })
+          .then(()=>this._render())
+          .catch((e)=>this._toast("Could not reset: " + String(e), true));
+      },
     };
 
     root.appendChild(buildLightsMapCard(host));
