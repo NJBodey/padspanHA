@@ -14,7 +14,7 @@ solution of its kind.
 | 1 | DONE (4fea4ae) — position glide + fade + trails; room-color re-tint still an instant snap, not crossfaded | Animated live movement: tweened markers, room-color transitions, fading trails | visualization |
 | 2 | DONE (9c5e792) — distance rings + room-vote bars in the detail modal; confidence halo was already shipped (always-on dashed ring, not gated on click) | Confidence/evidence visualization: per-scanner distance rings, per-room probability, confidence halo | visualization |
 | 3 | DONE (1211334) — point×scanner, not literally scanner×scanner (verified no scanner-to-scanner RSSI exists) | Scanner-pair calibration error matrix (heat-colored, reset/relearn buttons) | analytics |
-| 4 | DONE (e63d664) — table form; iso-map heat-tint not built this pass | Room-dwell analytics: time-in-room, occupancy heatmap, entries/exits, CSV export ("Insights" tab) | analytics |
+| 4 | DONE (e63d664, f2891b8b) — table form (Insights) plus the heat-tint (Busy Times, 2026-09-18) — as its own tab, not drawn onto the iso map, so it never touched overview.js's rendering pipeline | Room-dwell analytics: time-in-room, occupancy heatmap, entries/exits, CSV export ("Insights" tab) | analytics |
 | 5 | DONE (e7285bc) — no "alignment view"; numeric settings fields only | GPS geolocation bridge: fabric→lat/long, device_tracker GPS attrs, HA map interop | platform |
 | 6 | DONE (ea14f51) — pinning/auto-cal already existed; drift + matrix rows were the actual gap | Anchored beacons: stationary tags as ground truth (drift warnings, free auto-calibration) | editing |
 | 7 | DONE (9c10575) — tier 1/3 (Sweet Home 3D) only; RoomPlan JSON and image room-detection not started | Floorplan import: Sweet Home 3D first, then RoomPlan JSON, then image room-detection | editing |
@@ -92,9 +92,12 @@ the research output; the essentials are restated per item below.
    per-room hourly concurrent-occupancy count. New "Insights" tab
    (views/insights.js): a Time-in-Room table, a Peak Concurrent Occupancy
    summary, CSV export (reuses forensics.js's escaper) and JSON export.
-   REMAINING: dwell heat tint drawn ON the iso map's room polygons —
-   deliberately not touched this pass to avoid two features fighting over
-   overview.js's rendering pipeline so soon after gap #1.
+   RESOLVED (2026-09-18, f2891b8b): the dwell heat tint shipped as its own
+   tab — "Busy Times" (views/busy_times.js) — a flat room-box grid colour-
+   tinted by total dwell time with a 24-hour busy-hour sparkline per room,
+   not drawn onto the iso map's room polygons. Reuses padspan_ha/insights_get
+   verbatim; no new backend. Sidesteps the original concern (two features
+   fighting over overview.js's rendering pipeline) by never touching it.
 5. **GPS bridge** — DONE (core bridge). New geo_bridge.py converts fabric
    (x_m, y_m) to real lat/long given a settings-configured origin +
    bearing (verified first nothing like this existed — the fabric plane
