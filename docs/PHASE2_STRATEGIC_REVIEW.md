@@ -557,6 +557,177 @@ add it to whatever mechanism already watches upstream HA changes for
 this project (the same pattern `docs/ROADMAP.md`'s mmWave entry already
 uses for a different upstream-dependency question).
 
+### H. Analytics depth: what BMS/RTLS/digital-twin platforms offer beyond dwell-time, and whether it's buildable solo
+
+A separate research pass asked a narrower question directly: what do
+commercial BMS, RTLS, and digital-twin platforms sell as their *next tier*
+beyond the historical dwell-time/occupancy analytics PadSpan already ships
+(Insights / Busy Times) — anomaly detection, predictive maintenance,
+occupancy-driven HVAC optimization, cross-device correlation — and is any
+of it realistically buildable by a solo developer with AI assistance at
+residential scale, or does it require data-science scale PadSpan can't
+reach. Full sourced writeup, ~20 citations:
+[research/analytics-depth-phase2.md](research/analytics-depth-phase2.md).
+
+**The evidence splits cleanly into three buckets, not one yes/no:**
+
+- **Buildable now, real ROI:** statistical baseline-deviation flagging on
+  data PadSpan already computes — comparing a room's dwell time/occupancy
+  against that same room's own rolling history. This is the exact pattern
+  Flo by Moen / Phyn use for residential leak detection (learned
+  per-fixture flow/pressure baseline, deviation triggers the alert, no
+  fleet ML involved), and it matches what ecobee's own production
+  thermostats do: published research training a random-forest occupancy
+  model **per individual home**, not a fleet, found it "relatively
+  efficient to train for individual devices" and as accurate as heavier
+  models. No ML library, no fleet data, no new device-class plumbing
+  needed — it's a statistics layer on tables that already exist.
+- **Buildable, conditional value:** explainable cross-device correlation
+  via association-rule mining ("motion in Kitchen predicts Kettle on
+  within 3 minutes, seen on 84% of mornings") — cheap to compute nightly,
+  fully explainable, no black box, reuses stored history. Real caveat:
+  only pays off in homes with enough distinct device classes wired into
+  one install to generate discoverable patterns — worth checking against
+  actual Install Base device-class diversity before building it, not
+  assumed.
+- **A real trap — do not chase or market this:** true predictive
+  maintenance (equipment-failure signatures — "this compressor fails in
+  14 days") and enterprise Fault Detection and Diagnostics (FDD) fault-mode
+  libraries. On any given day 40% of commercial AHUs run with an active
+  fault, and the FDD industry exists to rank hundreds of named fault types
+  against that reality — built by fleet operators (ABB, Siemens, Uptake,
+  IBM Maximo) from thousands of instrumented, *actually failing* identical
+  units. A single-home, no-telemetry, GPLv3 HACS integration has no path
+  to that kind of data, by design, ever. Borrowing "predictive
+  maintenance" language from BMS vendors would promise PadSpan users a
+  capability the product structurally cannot deliver at N=1 furnace.
+
+**Confirms a finding already in §F, from a completely different
+direction:** both anomaly detection and cross-device correlation are
+inherently per-device-class concerns — the exact dimension currently
+hand-threaded separately through `light_codes.js`, `lights_map.js`,
+`iso_lights.js`, and `maps.js`. This research thread arrived at "build a
+device-class registry first" independently, from BMS/RTLS literature
+rather than from refactoring literature — a second, unrelated line of
+evidence for Phase 2a below, not a coincidence.
+
+**PadSpan-specific opportunity, not just a caution:** PadSpan's BLE
+presence fabric is already the one input commercial occupancy-driven HVAC
+vendors pay the most to acquire — BrainBox AI, 75F, and Siemens DVO report
+15–28% documented energy savings, with occupancy-awareness adding a
+further **+8.6%** on top of a 25% base AI-control saving in one published
+case study — and it's already richer than what most residential
+thermostats get natively (one sensor per zone vs. PadSpan's trilaterated,
+room-level graph). A *passive* occupancy-aware HVAC hint ("Living Room
+empty 6h, zone still heating" — not closed-loop control) would ride on
+infrastructure PadSpan already shipped, not request new capability.
+
+**Bottom line for this angle:** analytics-depth is not uniformly a good
+Phase 2 investment or uniformly a trap. The buildable slice (baseline
+deviation, association-rule correlation, occupancy-aware HVAC hints) rides
+on data and infrastructure PadSpan already has, and matches what actually
+ships successfully at residential scale today (Nest, Ecobee, Flo, Phyn —
+all baseline/heuristic, none fleet-ML). The unbuildable slice (predictive
+maintenance, enterprise FDD) is specifically the BMS-vendor language the
+original question borrowed, and the evidence says clearly it requires a
+scale of data PadSpan's architecture cannot reach, independent of
+developer skill or AI assistance.
+
+### I. Named comparables for §3F — does any real product already solve
+"many typed things on one canvas" the way the registry fix proposes?
+§3F names the smell (Fowler's Shotgun Surgery) and the canonical CS fix;
+these are working systems that actually ship that fix, spanning
+mapping/GIS, the HA ecosystem specifically, a cross-vendor smart-home
+standard, and — per the brief to look outside HA too — a non-HA visual
+editor and the game-engine answer to type explosion.
+
+**Exact scale, grepped directly rather than re-estimated:** the identical
+seven-way membership chain — `isFan || isMotion || isTemp || isAir ||
+isHumidity || isLock || isFlood` — appears **three separate times inside
+`iso_lights.js` alone** (lines 2768, 2790, 2795), plus independent copies
+again in `lights_map.js` and `maps.js`. Shotgun Surgery in its most
+literal form: not just "many files," the *same line* hand-retyped
+repeatedly inside one file.
+
+- **QGIS** separates "what kind of data is this" from "how do I draw
+  it" into two registries — `QgsProviderRegistry` for data-source types,
+  `QgsRendererRegistry`/`QgsSymbolLayerRegistry` for geometry-type
+  styling — each populated by one registration call per type; every
+  existing tool (attribute table, styling panel, export) queries the
+  registry instead of enumerating known types.
+  ([QgsRendererRegistry](https://qgis.org/pyqgis/master/core/QgsRendererRegistry.html),
+  [QgsProviderRegistry](https://api.qgis.org/api/classQgsProviderRegistry.html))
+  The closest 1:1 analogue to Atlas: PadSpan needs QGIS's *metadata*
+  registry, not a renderer registry — `iso_lights.js`'s draw code can
+  stay one function.
+- **Home Assistant's own `device_class` system** is the same ecosystem
+  solving the identical problem at real scale — `sensor/const.py`
+  (current `dev` branch) maps class-specific behavior into flat dicts
+  keyed by the enum, e.g. `DEVICE_CLASS_UNITS: dict[SensorDeviceClass,
+  set[...]] = {SensorDeviceClass.TEMPERATURE: set(UnitOfTemperature),
+  SensorDeviceClass.ENERGY: {UnitOfEnergy.WATT_HOUR, ...}, ...}`
+  ([source](https://github.com/home-assistant/core/blob/dev/homeassistant/components/sensor/const.py)) —
+  table lookups, no per-consumer if/else chains. Honest counterweight
+  from the same source ecosystem: an HA architecture discussion on
+  adding one new binary_sensor device class documents real friction even
+  with this registry in place — "it's extremely difficult to override"
+  some properties, and one new class still needs coordinated changes
+  across core, frontend, and docs
+  ([discussion #696](https://github.com/home-assistant/architecture/discussions/696)).
+  A registry retires the *rendering/filtering* duplication; it doesn't,
+  and shouldn't try to, make inventing a genuinely new concept free.
+- **`ha-floorplan`** (the actively-maintained HACS card mapping
+  arbitrary HA entities onto an SVG floorplan — the single closest
+  community project to Atlas in spirit) maps entities to SVG elements by
+  id, with entity groups, state→CSS-class mappings, and templates all
+  defined in user-authored YAML, and **no per-domain exclusion-list code
+  in the card itself at all**
+  ([README](https://github.com/pkozul/ha-floorplan/blob/master/README.md)).
+  The most humbling comparable in this pass, not the most flattering
+  one: a same-ecosystem peer of comparable scope never produced this
+  problem — real evidence the ~25-site cost was avoidable from day one,
+  not an inherent tax of "visualize many device types."
+- **Matter** (the current cross-vendor smart-home standard — Alexa,
+  Google Home, and Apple all implement it) defines a device type as a
+  bundle of *clusters* (on/off, level-control, boolean-state…) plus
+  semantic tags, so a generic client renders a device correctly by
+  asking "does this have cluster X," never "is this specifically a
+  flood sensor"
+  ([device data model](https://developers.home.google.com/matter/primer/device-data-model)).
+  The most directly transferable idea for naming the registry's fields:
+  after *capabilities* (`castsLight`, `hasAuraPool`), not class identity.
+- **Outside HA entirely, as instructed:** an ECS (entity-component-
+  system, the standard game-engine answer to type explosion) makes
+  behavior come from which components an entity holds, queried
+  generically, never from concrete type
+  ([overview](https://en.wikipedia.org/wiki/Entity_component_system)) —
+  correct *mental model*, wrong *weight*: a full ECS runtime would be
+  over-engineering for ~7-12 device classes in a UI codebase. Figma's
+  plugin API similarly keys node behavior off a `type` property
+  consumers switch on
+  ([node types](https://developers.figma.com/docs/plugins/api/nodes)) —
+  closer to PadSpan's actual scale, but still a heavier per-type-file
+  contract than a flat capability table needs. Grafana's `PanelPlugin` +
+  `FieldConfig`/`DisplayProcessor` system
+  ([PanelPlugin.ts](https://github.com/grafana/grafana/blob/master/packages/grafana-data/src/panel/PanelPlugin.ts))
+  is the real production-scale version of this idea, cited here as a
+  weight *ceiling*: it exists because Grafana ships third-party,
+  out-of-tree panel types. PadSpan's device classes are first-party and
+  in-tree — building Grafana's version of this would solve a problem
+  PadSpan doesn't have.
+
+**Net finding for §3F/Phase 2a:** every comparable that stayed
+maintainable at a similar or larger scale (QGIS, HA core, ha-floorplan)
+used the same shape already proposed — one flat table, one entry per
+type, consumed generically — never a plugin loader or a component
+runtime. That confirms Phase 2a's registry is right-sized, not
+under-scoped, and confirms (via `ha-floorplan` specifically) this is a
+self-inflicted, not inherent, cost. Nothing found here changes Phase
+2a's shape; it corroborates it with the exact category of comparable
+the founding question named by example (QGIS layer types, Leaflet/
+Mapbox custom-layer patterns, big HACS Lovelace-card projects, non-HA
+visual editors and game-engine ECS).
+
 ---
 
 ## 4. Gaps
@@ -622,6 +793,18 @@ anchor; there's no day-225 equivalent stating the *current* intentional
 scope. This is a paperwork gap, not a code gap, but it's the one that
 would let a future contributor (or Garry in six months) tell the
 difference between "this feature is core" and "this feature happened."
+
+**4.7 — No baseline-deviation or cross-device-correlation layer on top of
+Insights/Busy Times data (§H).** The dwell-time/occupancy history PadSpan
+already computes has no "is this different from that room's own normal"
+layer, and nothing correlates activity across device classes. Distinct
+from 4.1-4.6: this isn't debt from something built wrong, it's upside not
+yet built on data already in hand — see Phase 2g. Also worth stating
+explicitly as a *boundary*, not a backlog item: true predictive
+maintenance / equipment-failure prediction is out of reach for a
+single-home, no-telemetry, GPLv3 project regardless of effort (§H) — this
+gap should stay bounded to what §H's research found buildable, not expand
+toward BMS-vendor "predictive maintenance" framing.
 
 ## 5. Phase 2 Plan
 
@@ -690,6 +873,24 @@ criterion? Every source in §3D says this erosion is real, gradual, and
 invisible from the inside — naming it is the only defense that doesn't
 require building anything.
 
+**Phase 2g — Baseline-deviation + occupancy-aware HVAC hint on existing
+Insights data (addresses 4.7, §H).** Two small, sequenced items, both
+riding on data/infrastructure already shipped rather than requesting new
+capability: (1) flag when a room's dwell time/occupancy deviates from
+that same room's own rolling history — no ML dependency, same pattern
+Flo/Phyn and ecobee's production thermostats already use at residential
+scale; (2) a passive suggestion surface joining existing BLE room-presence
+with existing Atlas temperature/humidity placement ("Living Room empty
+6h, zone still heating"), not closed-loop control. Do this *after* Phase
+2a — both items are per-device-class logic that should read from the
+registry, not add an eighth place a device-class list gets hand-maintained.
+Association-rule cross-device correlation is explicitly a *candidate*, not
+committed scope: validate against actual Install Base device-class
+diversity first (a data question) before building it. Predictive
+maintenance / equipment-failure prediction is explicitly out of scope,
+not deferred — §H's research found it requires fleet telemetry this
+project cannot and should not collect.
+
 ---
 
 **Bottom line:** the trajectory is sound. The evidence for that isn't
@@ -700,3 +901,524 @@ report disagrees with "everything's fine" is the device-class pattern,
 and that disagreement comes with a specific, small, already-precedented
 fix (2a) rather than a call to slow down.
 
+---
+
+## 6. Outside Home Assistant: The BMS / Digital-Twin Category
+
+Garry's brief specifically asked to research "even outside HA" — the
+commercial Building Management System (BMS) and digital-twin category
+PadSpan is drifting toward as it adds device control, alarms, and
+analytics on top of a spatial map: Honeywell Forge, Johnson Controls
+Metasys/OpenBlue, Siemens Desigo, Willow, Disruptive Technologies,
+Density.io, Matterport for Business. This section is that pass, run
+independently of §§1-5 above (live web search, 2026-09-19) — it
+converges on the same headline fix (§5's device-class registry) from a
+third, completely different direction, which is worth taking as a
+signal in itself: three unrelated research angles (refactoring
+literature, agentic-entropy research, and building-industry ontology
+practice) landing on the identical missing piece.
+
+**What real BMS/digital-twin platforms do that a home never needs — the
+dividing line is portfolio scale, not any single feature.** Willow's
+knowledge graph "unifies spatial, static, and live data" across "75+
+built world systems" and "over 10 million telemetry points in
+real-time" ([Willow platform](https://willowinc.com/willow-platform/)); its Oxford deployment is cited as
+"approaching $1 million per year in avoided operating and energy
+costs" ([Willow Knowledge Graph](https://willowinc.com/knowledge-graph/)) across a large commercial estate, and even its
+flagship single-building deployment (Brookfield's One Manhattan West)
+is measured in "200 hours of developer *integrator* time saved in a
+single month" ([Microsoft: RealEstateCore now available](https://techcommunity.microsoft.com/blog/iotblog/realestatecore-a-smart-building-ontology-for-digital-twins-is-now-available/1914794)) — the unit of value is
+professional integrator time across many disparate systems, a problem
+PadSpan doesn't have because HA already normalizes every entity before
+Atlas ever sees it. Siemens Desigo CC's headline capability is protocol
+translation — "BACnet, OPC, Modbus and SNMP" plus "KNX over IP and
+M-bus TCP/IP" ([Siemens Desigo CC](https://www.siemens.com/us/en/products/buildingtechnologies/automation/desigo-cc.html)) — dozens of incompatible field protocols
+normalized into one view. **This is the single biggest reason PadSpan's
+~100k lines look small next to "a real BMS": it is missing an entire
+subsystem by design, correctly** — HA did that work already. Willow's
+"Active Control" grid-interactive load shedding requires a utility
+relationship no residence has. None of this is latent value PadSpan is
+leaving on the table by not building it — it's a different problem
+class, and chasing it would be a mistake, not a gap.
+
+Formal ISA-18.2-style alarm-management apparatus — Honeywell Forge's
+Active/Archived alarm console with per-alarm flag/unflag and a full
+"Alarm Management Reporting" product line (Collector/Archiver/Analyzer)
+for compliance documentation ([Honeywell Forge Alarm Management Reporting](https://process.honeywell.com/content/dam/process/en/documents/document-lists/doc-list-alarm-management/hon-alarm-reporting.pdf)) —
+exists because an industrial control room can have hundreds of alarms
+fire in minutes during an upset and a missed one is a safety incident.
+ISA-18.2 itself defines "alarm flood" as "more than 10 alarms
+annunciating in a 10-minute period" ([Emerson: Alarm Rationalization white paper](https://www.emerson.com/documents/automation/white-paper-alarm-rationalization-deltav-en-56654.pdf)). A house
+doesn't have that volume problem; PadSpan's flood-sensor alerting
+should borrow the *shape* of alarm-state discipline (acknowledge vs.
+resolve as distinct actions — the same split Section 3's sources arrive
+at from software-engineering literature) without importing the
+committee-and-compliance-reporting apparatus built for a very different
+scale problem.
+
+**Device-on-floorplan control has both a commercial and an open-source
+precedent, and both point at exactly the registry fix §5 Phase 2a
+proposes — from a third angle.** Desigo CC binds devices to floorplans
+via "dedicated graphic templates" drawn from a *library*, looked up by
+device type rather than hand-drawn per feature ([Siemens Desigo CC](https://www.siemens.com/us/en/products/buildingtechnologies/automation/desigo-cc.html)).
+Matterport's "Tags" are one generic attachable-metadata primitive reused
+across every asset type — "each tagged asset linked to its
+specifications, maintenance history, and vendor contact" ([Matterport: Facilities Document Management](https://matterport.com/blog/facilities-document-management)) —
+not a different code path per asset class. Most directly: **Brick
+Schema, Project Haystack, and RealEstateCore** are metadata ontologies
+that exist in the building industry because "highly customized and
+inconsistent modeling practices" emerge whenever a device's class and
+capabilities are ad hoc logic instead of structured data ([Brick vs. Haystack comparison](https://medium.com/@erik_paulson/a-comparison-of-the-brick-schema-and-project-haystack-2a9adde5013a), [Brick Ontology docs](https://docs.brickschema.org/intro.html)).
+Brick represents a device as "triples of descriptive tags" ([Brick comparison page](https://brickschema.org/comparision/)) so
+type and relationships are *looked up*, not hard-coded into every
+consumer — the building-industry name for the identical problem §3F
+names "Shotgun Surgery" and §4.1/§5 Phase 2a already propose fixing
+with `DEVICE_CLASS_REGISTRY`. PadSpan does not need RDF triples or a
+graph database at 7 device classes, but the fact that an entire
+industry independently built ontology standards to solve this exact
+class of problem is strong outside confirmation that Phase 2a is the
+right fix, not gold-plating.
+
+**Occupancy-analytics vendors treat "what does this number mean" as a
+first-class design problem — worth checking Busy Times/Insights against
+directly, not assumed either way.** Density's public position is that
+"occupancy sensor accuracy isn't one number" and for large-area sensors
+they report "Time Within Tolerance" rather than a bare percentage,
+because "real-world conditions matter more than a flat '99%' claim"
+([Density: "99% Accurate" Occupancy Sensors](https://www.density.io/resources/the-truth-behind-99-accurate-occupancy-sensors)). BLE RSSI-derived peak-occupancy and
+dwell-time numbers sit on the same kind of noisy substrate. This pass
+did not check whether Busy Times/Insights currently present any
+confidence/error framing or show bare figures — a direct, checkable
+question against the live UI, not a finding either way, and a small
+addition to the gap list below.
+
+**Is there a real "residential-scale BMS" category, and who else is in
+it?** No incumbent combining PadSpan's specific bundle — BLE room-level
+presence, a full device/sensor floorplan, historical occupancy
+analytics, and an alarm-acknowledgment workflow — at consumer pricing
+and DIY install surfaced anywhere in this pass:
+- The enterprise BMS/digital-twin vendors above are portfolio
+  businesses by construction. Honeywell's "Remote Building Manager" is
+  explicitly marketed at "small- to medium-sized buildings" ([Honeywell SMB press release](https://www.honeywell.com/us/en/press/2020/12/honeywell-makes-building-management-easier-for-small-to-medium-sized-buildings)) — still
+  commercial SMB (offices, retail), not residential.
+- The closest incumbents by price tier and install context are luxury
+  home-automation platforms — Control4, Savant, Crestron Home, Josh.ai.
+  Savant's "TrueImage" (tap real room photos to control devices) is the
+  closest existing consumer metaphor to device-on-a-map control
+  ([Digital Systems: Control4 vs Savant vs Josh.ai](https://www.digitalsystemsav.com/blog/smartsystemcomparison/)), but nothing surfaced shows any of them
+  shipping occupancy heatmaps, dwell-time analytics, or an alarm-ack
+  workflow — they're control-and-scene platforms, not
+  sensor-fusion-plus-analytics platforms.
+- The closest architectural peers for device-on-floorplan specifically
+  are open-source HA cards — `ha-floorplan`, `housemap-card`,
+  `houseplan-card` ([ha-floorplan](https://github.com/ExperienceLovelace/ha-floorplan), [housemap-card](https://github.com/AldenDana/housemap-card), [houseplan-card](https://github.com/Matysh/houseplan-card)) — visualization/control
+  primitives with no BLE fusion, analytics, or alarm workflow from what
+  surfaced.
+
+Read honestly, this cuts both ways and research alone can't fully
+resolve it: either PadSpan is early to genuine residential-BMS
+whitespace the enterprise vendors have no economic reason to chase (one
+house is a rounding error next to a portfolio contract) and the
+luxury-AV incumbents have no technical reason to chase (they sell
+installation and scenes, not analytics) — **or** nobody has found
+sufficient home demand for occupancy heatmaps and alarm workflows to be
+worth building, and PadSpan is testing that demand for the first time.
+Only PadSpan's own install-base usage data (presence-only vs.
+Atlas/Locate/Busy-Times/flood-alarm adoption) can tell these apart —
+worth adding to Phase 2 as a validation step, not a build step.
+
+**One additional, separate risk this pass surfaced:** Home Assistant's
+security team has twice published coordinated disclosures naming
+vulnerabilities in third-party HACS integrations — flaws that "allowed
+an attacker to steal any file without logging in" ([HA Security Disclosure, Jan 2021](https://www.home-assistant.io/blog/2021/01/22/security-disclosure/), [HA Security Disclosure 2](https://www.home-assistant.io/blog/2021/01/23/security-disclosure2/)) — and
+GitHub's security team separately published a methodology for auditing
+HA integrations specifically because of this risk class ([GitHub Security Lab: Home Assistant code review](https://github.blog/security/vulnerability-research/securing-our-home-labs-home-assistant-code-review/)).
+This is the specific vulnerability class (unauthenticated file/service
+access via a third-party HACS integration) that matters most once an
+integration controls locks and issues alarm state — which PadSpan now
+does. Nothing found suggests PadSpan has this specific problem; the
+point is that the risk category is proven, documented, and rising in
+relevance as PadSpan's blast radius grows, independent of code
+quality — and nothing in this repo shows it's been checked for.
+
+**Confirms/challenges, explicitly:**
+- **CONFIRMS**, from a third independent direction: the device-class
+  registry (§5 Phase 2a) is the correct, highest-leverage fix — the
+  building industry built entire ontology standards (Brick/Haystack/
+  RealEstateCore) to solve the same problem Fowler's literature calls
+  Shotgun Surgery and today's agentic-entropy research calls locally-
+  correct/globally-arbitrary code.
+- **CONFIRMS**: no commercial BMS/digital-twin vendor and no luxury
+  home-automation platform currently bundles PadSpan's specific
+  combination of pillars at residential price/install context —
+  consistent with genuine whitespace, not evidence of reinventing a
+  solved product badly.
+- **CHALLENGES**, and this is new relative to §§1-5 above: PadSpan has
+  crossed into a risk category (lock control + alarm state, shipped at
+  1.7 releases/day through a HACS distribution channel with documented
+  precedent for exactly this vulnerability class) that has nothing to
+  do with code architecture and everything to do with review-from-
+  outside — a gap this report did not previously name.
+- **CHALLENGES, mildly**: "residential-scale BMS" positioning is
+  architecturally plausible but not usage-validated. The absence of an
+  incumbent is as consistent with untested demand as with unclaimed
+  whitespace.
+
+**Added to the gap list (§4), not duplicating it:**
+- **4.7 — No independent security review**, against the documented
+  HACS third-party-integration vulnerability class, given PadSpan now
+  controls locks and holds alarm state. Doesn't need to be a paid audit
+  to start — a self-run pass against HA's own custom-integration
+  security guidance and the GitHub Security Lab's published methodology
+  beats the current "no review" state.
+- **4.8 — Occupancy-analytics confidence framing is unverified**, not
+  confirmed broken. Whether Busy Times/Insights present any
+  uncertainty framing on peak-occupancy/dwell-time numbers wasn't
+  checked against the live UI in this pass — a five-minute look, not a
+  research question.
+- **4.9 — "Residential-scale BMS" positioning is unvalidated by usage
+  data.** No incumbent surfaced combining PadSpan's four pillars, but
+  external research can't distinguish genuine whitespace from untested
+  demand — only PadSpan's own install-base adoption data can.
+
+**Added to the Phase 2 plan (§5), sequenced after Phase 2a-2c:**
+- **Phase 2g — Independent security pass** (addresses 4.7): file/
+  service-access-boundary review specifically, before the next feature
+  that touches locks or alarm state.
+- **Phase 2h — Instrument or survey feature adoption** (addresses 4.9):
+  presence-only vs. Atlas/Locate/Busy-Times/flood-alarm usage among
+  current installs — the only available test for whether the
+  residential-BMS breadth is earning its ~25-edit-per-feature cost, or
+  running ahead of demand.
+- **Phase 2i — Check Busy Times/Insights against the Density
+  confidence-framing bar** (addresses 4.8): either already there, in
+  which case this closes in five minutes, or a small, well-scoped UI
+  addition.
+
+This section's own bottom line, additive to §5's: **the path is sound,
+and the one architectural fix already prioritized (Phase 2a, the
+device-class registry) now has three independent literatures — software
+refactoring, agentic-AI-development research, and building-industry
+metadata standards — agreeing it's the right and sufficient fix. The
+net-new finding from going outside HA is not architectural; it's that
+PadSpan's growing control surface (locks, alarms) has outpaced any
+outside review of it, and that a residential-BMS category claim, while
+plausible and currently unclaimed, is not yet backed by PadSpan's own
+usage evidence.**
+
+
+
+---
+
+## 7. Monetization & Pricing — Research Angle (added in parallel with §§2-6 above)
+
+*This section was researched independently, in parallel with the
+architecture/velocity angle above (§§2-5), and answers a different half
+of Garry's original question: not "is the codebase sound" but "is the
+$45/$35/$12, two-product pricing structure sound, and does the
+ecosystem support charging for a HACS-distributed integration at all."
+It doesn't reference or depend on §§2-5's device-class registry work,
+and should be read as a second, independent lens on "am I on the right
+path" — the two verdicts don't conflict, they cover different risks.*
+
+**Research method note:** built from live web search, direct page
+fetches, and — for long-standing, stable facts about named products
+(GPL terms, WordPress's freemium norm, Fowler's refactoring catalog) —
+existing knowledge, since live search on those would only reconfirm
+something unlikely to have changed. This session's live web search ran
+out of its per-session call budget partway through this angle's research
+(a hard cap, not a topic search coming up empty); a couple of
+sub-questions below are marked **unverified live** and reasoned from
+direct fetches plus general knowledge instead, flagged rather than
+presented as confirmed.
+
+### G. Monetization precedent inside the HA/HACS ecosystem specifically
+
+**HACS's own stated position is that it is a free, open-source
+distribution mechanism, full stop.** The HACS 2.0 announcement is
+direct: *"HACS ... despite the name, it doesn't sell anything ... it's
+all free and open-source."* ([Home Assistant blog, Aug 2024](https://www.home-assistant.io/blog/2024/08/21/hacs-the-best-way-to-share-community-made-projects/))
+HACS is a discovery/install mechanism for GitHub repos — it doesn't
+process payments, license keys, or gate downloads. PadSpan's actual
+model (free code shipped through HACS, paid *features* gated at runtime
+by a call to an external license server — `server/telemetry.php`,
+`server/version.php` etc. in this repo) sits entirely outside anything
+HACS itself contemplates. That's not forbidden, but it also means
+there's no existing HACS-native UX pattern users already trust for
+"this free-looking install needs a paid key," the way a WordPress.org
+plugin's "Upgrade to Pro" notice is now a familiar, trusted pattern
+(§H below).
+
+**The two clearest examples of real money moving in the HA ecosystem are
+both recurring *hosted services*, not feature-unlock licenses:**
+- **Nabu Casa Home Assistant Cloud** — ~$6.50/mo or ~$65/yr, funds core
+  HA development, buys remote access, cloud voice (Alexa/Google), managed
+  backups. ([nabucasa.com](https://www.nabucasa.com/), [pricing](https://support.nabucasa.com/hc/en-us/articles/26179687501341-How-much-does-a-Home-Assistant-Cloud-subscription-cost))
+  Nabu Casa is the company that employs HA's founder and funds core
+  development — a "sustaining the thing I already trust" framing, not a
+  feature paywall.
+- **Frigate+** — $10/mo or annual, plus paid add-on fine-tunes — sells
+  continuously-improving hosted ML models trained on real user
+  submissions (packages, wildlife, delivery logos). The free, bundled
+  Frigate NVR + HA integration remains fully functional without it.
+  ([frigate.video/plus](https://frigate.video/plus/))
+
+Both charge for something with an *ongoing marginal cost to the
+provider* (bandwidth, retraining, hosting) — the argument this community
+visibly accepts. **PadSpan Pro charges to unlock features in code that,
+once downloaded, runs entirely on the user's own hardware with no
+ongoing per-user cost** — structurally closer to a WordPress Pro-plugin
+unlock (§H) than to Nabu Casa or Frigate+, but without WordPress's
+decade of user habituation to that pattern inside *this specific*
+community. That mismatch — paying for local software vs. paying for an
+ongoing service — is very likely the real fault line this community's
+free-software reflex runs along, more than "pay vs. free" in the
+abstract.
+
+**Despite deliberately searching for one** (multiple query variants,
+direct fetches of HACS's own docs, and several search engines once the
+web-search budget ran out), **I could not find a single named,
+established third-party HA custom integration running a
+free-HACS-listing + paid-license-key-gated-Pro model at anything like
+PadSpan's scale.** That absence is itself the finding, not a research
+gap: either this pattern is genuinely rare-to-novel in the third-party
+HA integration space, or it exists but has never generated enough
+discussion to be indexed — and given how vocal this community is about
+pricing (below), the second explanation is the less likely one.
+Moderate confidence, not certainty — worth a follow-up search with a
+fresh budget rather than fully trusting this report on this point alone.
+
+**Community sentiment found:** direct research surfaced a consistent
+pattern of HA forum contributors advising that releasing an integration
+free-first "attracts more users and generates genuine enthusiasm...
+provide a platform to receive feedback... a collaborative and
+user-focused approach that will yield better results in the long run" —
+set against the fact that "most 3rd-party Home Assistant integrations
+are maintained by a single person in their free time," i.e. the
+community's own volunteers already absorb the cost PadSpan is charging
+for. Home Assistant's own FAQ states plainly: *"no subscription to use
+it, no features are locked behind a paywall"*
+([home-assistant.io/faq/is-it-free](https://www.home-assistant.io/faq/is-it-free/))
+— the baseline expectation everything in this ecosystem gets measured
+against, fair or not. **Unverified live:** a specific, named
+r/homeassistant thread reacting to a paid custom integration (or to
+PadSpan Pro itself) — worth a direct, targeted follow-up search.
+
+### H. Outside HA: the closest working analog is WordPress plugin freemium — and it's proven, with one structural mismatch
+
+The closest real precedent to PadSpan's shape is not in home automation
+at all — it's the WordPress plugin ecosystem, running exactly this
+pattern (free-in-a-community-directory + separately-sold Pro,
+license-key-gated, updates from your own server) at scale for over a
+decade: **Yoast SEO, WooCommerce extensions, Advanced Custom Fields
+(ACF), Elementor, WP Rocket** are all real, durable examples.
+
+Documented best practice, worth checking PadSpan against directly:
+*"The free plugin lives in the directory, is fully functional on its
+own, and contains zero paid code — no disabled buttons or dead
+'upgrade to unlock' screens... The Pro add-on is a separate product you
+sell off-site; the free plugin never contains the Pro code and the Pro
+code never ships in the directory."* ([dev.to writeup](https://dev.to/rebel_studios/how-to-structure-a-freemium-wordpress-plugin-that-passes-wporg-review-2hlf);
+consistent with [freemius.com](https://freemius.com/blog/freemium-business-model-wordpress/))
+The free tier is chosen to be genuinely useful standalone — a
+trust-building tool, not a crippled trial.
+
+**Where this maps cleanly onto PadSpan, and where it stops:** PadSpan HA
+(free) → PadSpan Pro ($45/yr) matches this pattern well — the free core
+is genuinely useful on its own. **PadSpan Bright is structurally
+different from a WordPress-style free tier, though**: it isn't "the free
+tier of PadSpan," it's BLE presence *removed entirely* and repackaged as
+a second, separately-listed product. WordPress's model has exactly one
+free/Pro relationship per plugin; PadSpan has built two products, each
+with its own free/Pro split, sharing most of their code. **The
+WordPress precedent validates PadSpan HA → PadSpan Pro. It does not
+obviously validate a second product (Bright/Bright Pro) existing
+alongside the first** — see §J.
+
+**A second, less-close analog: Craft CMS's official Plugin Store**,
+where paid plugins are normalized and sold *through the platform*
+(revenue share, built-in licensing, price shown next to free plugins) —
+closer to an app-store model than WordPress's off-site sales. HACS
+offers none of this (§G) — there's no in-platform payment rail for HA
+integrations the way Craft (or Shopify's App Store, or Figma's plugin
+marketplace, per general knowledge) provide. That's a real structural
+handicap: PadSpan does 100% of its own trust-building and payment UX
+(this repo's `server/` directory), where Craft/Shopify-style plugin
+authors get that trust and payment rail from the platform for free.
+
+**A useful negative case, for contrast: Obsidian.** Obsidian's own
+plugin documentation makes no mention of commercial/paid community
+plugins at all — the ecosystem norm is single free plugins, monetized
+informally via donations/GitHub Sponsors if at all. Obsidian is a
+closer *cultural* match to Home Assistant (enthusiast/tinkerer-heavy,
+historically donation- not subscription-oriented) than WordPress is
+(which has a large professional/agency user base already comfortable
+buying software). **That Obsidian's plugin economy stayed
+donation-based while WordPress's became a real paid-tier economy
+suggests the deciding factor isn't "can a plugin ecosystem support paid
+tiers" in the abstract — it's whether the user base already buys
+software for their business, vs. treats the whole stack as a hobby.**
+Home Assistant's user base sits closer to Obsidian's than WordPress's on
+that axis, even though PadSpan's monetization *mechanics* are copied
+from WordPress. That mismatch — WordPress-shaped monetization,
+Obsidian-shaped community — is a real, named risk, not a reason not to
+charge: it means don't assume WordPress's *success rate* transfers, only
+its *mechanics*.
+
+### I. Pricing-tier psychology: is the $45/$35/$12, 2-product×2-tier matrix well-designed?
+
+General SaaS/indie-pricing research converges on a few well-replicated
+findings, plus one classic finding that's shakier than its reputation:
+
+- **Three tiers is the practical sweet spot; five-plus tiers measurably
+  hurts conversion.** *"Offering 5+ tier options confuses customers, who
+  often pick the cheapest to avoid uncertainty. The fix is to stick to 3
+  tiers... too many choices create decision fatigue, confusing feature
+  comparisons create doubt, and the result is that buyers bounce."*
+  ([HelloAdvisr](https://helloadvisr.com/foundation/what-are-the-biggest-mistakes-founders-make-with-pricing/))
+- **The "decoy effect"** (a cheap/expensive pair making a middle option
+  look reasonable) **is the most commonly cited justification for
+  3-tier ladders, but rests on shakier empirical ground than pricing
+  blogs usually admit** — the original Huber/Payne/Puto (1982) and
+  Ariely-popularized result largely failed to replicate under realistic
+  conditions in later work. ([atticusli.com on the replication problem](https://atticusli.com/replication-crisis/decoy-effect-asymmetric-dominance/))
+  Worth knowing so a redesign doesn't lean on "add a decoy tier" as a
+  proven lever — the more robust finding is simply *fewer options,
+  clearer differentiation*.
+
+**Applied directly to PadSpan's actual price sheet:** PadSpan HA (free)
+/ PadSpan Pro ($45/yr) / PadSpan Bright (free) / PadSpan Bright Pro
+($35/yr) / Bright→Pro upgrade ($12) is **5 distinct price points** — past
+where this research says buyers stop reasoning cleanly. That count
+*undersells* the real complexity, because standard tiering research
+assumes **one product line** with tiers stacked on top. PadSpan's buyer
+resolves an entirely separate, prior decision — "which of two
+*products* am I even looking at" — **before** the familiar free-vs-Pro
+tier decision starts. That's a decision axis pricing-psychology
+literature doesn't model at all, because it's not a normal SaaS shape;
+it's closer to "two SKUs, each with their own tiers," which is a
+*product-line* problem (reduce the number of product lines), not a
+*pricing-ladder* problem (reduce the number of tiers) — and the fix for
+the two isn't the same fix. See §J.
+
+### J. Explicit confirm/challenge callouts (monetization angle)
+
+- **CHALLENGES the current structure directly:** no example found,
+  inside or outside HA, of a healthy 2-product × 2-tier + cross-upgrade
+  price sheet for a single-developer plugin/integration at this scale.
+  Every proven precedent researched (WordPress, Craft) is single-product,
+  free/Pro. The closest thing PadSpan has to justify *two* products is
+  the BLE/no-BLE split — but §4.3's own architectural finding (Atlas,
+  Automorph, flood alarms, Locate, and Busy Times all sell in *both*
+  products) says BLE presence is already optional infrastructure, not
+  the thing the rest of the platform depends on. If BLE is optional
+  already, Bright isn't really a second product — it's "PadSpan Pro with
+  a BLE toggle off," and giving it a separate brand, listing, and price
+  is very likely adding SKU count without adding real user-facing
+  distinctiveness. **This is the single highest-leverage pricing change
+  available:** collapsing to one product fixes both the tier-count
+  problem (§I) and the product-identity ambiguity in one move.
+- **CONFIRMS Garry can charge for this at all:** WordPress's freemium
+  plugin economy is a genuine, decade-proven existence case that a
+  free-core + paid-Pro-addon model works for exactly this shape of
+  product (a plugin extending a bigger free platform). The mechanics are
+  sound and battle-tested.
+- **CHALLENGES whether *this specific community* will respond to it the
+  way WordPress users do:** Home Assistant's culture (§H, §G) skews
+  toward Obsidian's donation-first norm, not WordPress's buy-first norm.
+  The framing on the pricing page ("this funds continued development,"
+  not "the free version is missing things") likely matters more here
+  than it would in a typical SaaS market, and nothing in the current
+  product pages was checked against that framing (out of scope for this
+  pass — worth a follow-up).
+- **No GPLv3-vs-license-gate legal read was attempted here** — PadSpan
+  HA ships GPL v3 (confirmed: `LICENSE` in this repo). GPLv3 doesn't
+  prohibit charging money or a server-side license check, but it does
+  guarantee redistribution rights for anyone who receives the code, and
+  (if Pro feature code itself ships client-side, dormant behind a gate,
+  rather than being withheld server-side entirely the way a WordPress
+  Pro plugin is) raises a real, checkable question about what exactly
+  GPL's terms require be shared. This is a licensing question for a
+  lawyer or a careful GPLv3 §4 read against the actual gating mechanism
+  in this codebase — flagged, not resolved, here.
+
+### Gaps (monetization angle)
+
+1. **No ecosystem precedent for this exact monetization shape** — §G.
+   Not disqualifying (someone has to be first), but it means PadSpan is
+   validating a go-to-market pattern with no comparable data point to
+   check pricing or backlash-risk against, on top of validating the
+   product itself.
+2. **Two products where the architecture suggests one.** §J — the
+   Bright/Pro split doesn't track a real architectural boundary anymore
+   (if it ever did); it currently tracks a marketing decision layered on
+   top of what the codebase actually treats as one optional module
+   (BLE). This is the pricing-side mirror of §1's "what is this project"
+   identity question.
+3. **5 price points is past the point pricing research says buyers
+   reason cleanly through**, and that's before accounting for the
+   extra "which product" decision this specific structure adds on top
+   (§I).
+4. **No public "why does this cost money" framing was found or
+   evaluated** — given §G/§H's finding that this community responds
+   better to "funds continued development" framing than to
+   feature-paywall framing, and no evidence either way was gathered on
+   what PadSpan's actual pricing page currently says.
+5. **GPLv3-vs-license-gate compliance is an open, unchecked question**
+   (§J) — not urgent, but unresolved, and cheap to resolve once with a
+   qualified read rather than carried indefinitely.
+6. **No visible support/refund/trial policy was found or evaluated**
+   for the paid tiers — flagged as *unknown*, not *absent*; a real gap
+   in this research pass, not a claim that no policy exists.
+
+### Phase 2 plan additions (monetization angle)
+
+**M1 — Resolve the Bright/HA product-identity question before touching
+any price numbers.** Decide explicitly: is BLE presence the flagship,
+with Atlas/Automorph/flood/Locate/Busy Times as its dependents (in which
+case Bright shouldn't be a separate product — it's a subset, and
+subsets don't need their own brand)? Or is the platform's real identity
+"Atlas + optional BLE" (in which case the free/Pro split should be drawn
+along Atlas-vs-BLE lines explicitly, in the product's own language, not
+left implicit in which of two differently-branded HACS repos someone
+happened to install)? Either answer is defensible; leaving it unanswered
+is what's producing the 5-price-point matrix. *Verify:* after the
+decision, the number of separately-branded HACS listings and the number
+of price points can both be stated in one sentence a new user could
+repeat back correctly.
+
+**M2 — Collapse to the fewest tiers M1's answer actually requires** —
+very likely 2 (free/Pro) if M1 lands on "one product," matching the
+well-supported "3 tiers max, ideally fewer" finding in §I, rather than
+leaning on decoy-tier tricks whose evidence base is weaker than
+reputation suggests. *Verify:* a first-time visitor to the pricing page
+can state which one price applies to them without asking a question.
+
+**M3 — Rewrite the pricing/upgrade page copy around "sustaining
+continued development of something already this deep,"** not "the free
+version is missing things" — cheapest item on this list, no code
+required, directly targets the community-fit risk in §H/§J.
+
+**M4 — Get a GPLv3-vs-license-gate read from someone qualified, once,
+in writing** (§J item 5) — stop carrying it as an open question rather
+than resolving it.
+
+**M5 — Once M1-M2 ship, go get the specific market data this pass
+couldn't:** search r/homeassistant and the HA forum specifically for
+reactions to PadSpan Pro itself (not generic precedent), and re-run "does
+any comparable paid HACS integration exist" with a fresh search budget
+rather than trusting §G's moderate-confidence null result indefinitely.
+
+**Bottom line, monetization angle:** the mechanics of charging for a
+free-core/paid-Pro HA integration are proven elsewhere (WordPress) and
+not forbidden by anything HA/HACS enforces — this is not a "you can't do
+this" finding. But the specific 5-price-point, 2-product structure is
+more complex than either this community's own monetization precedent
+(none found at this shape) or general pricing-tier research supports,
+and — separately from the architecture question §§2-5 already answered
+well — it's the one part of "am I on the right path" this report can't
+say yes to without a change. The fix (M1-M2) is a positioning and
+packaging decision, not a rebuild: collapsing Bright into a BLE toggle
+inside one product removes a SKU axis pricing research says is actively
+costing conversions, and resolves an identity question the codebase
+itself has already been signaling isn't clean (§4.3/§J).
