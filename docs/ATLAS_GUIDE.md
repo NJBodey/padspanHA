@@ -23,7 +23,7 @@ With a Pro/Bright Pro key:
 2. Either drag the pulsing pin straight onto the floor plate, or tap **+ Place** to queue it and then tap the map where it belongs.
 3. Set shape, size and rotation from the inspector — a light might be a pendant, sconce, strip or chandelier; sizes and angles are in real units (centimetres), not a generic dot.
 
-This works for lights, fans, locks, and motion, temperature, humidity and air-quality sensors — every class placed and moved the same way. A **live temperature reading** tints its marker and digits (blue under 20°, red at 20° and up, bright orange over 34°); a live **humidity** reading shows as a percentage. Motion normalizes across hardware too — a PIR that self-clears in 5 seconds and a radar sensor that holds "on" for 20 minutes both draw the same way: a short flash, then a graduated fade the longer it's been quiet. (Motion also stays quiet for a few minutes right after an HA restart, since a just-restored sensor's last change is the boot moment, not a real trigger.)
+This works for lights, fans, locks, and motion, temperature, humidity, air-quality and flood sensors — every class placed and moved the same way. A **live temperature reading** tints its marker and digits (blue under 20°, red at 20° and up, bright orange over 34°); a live **humidity** reading shows as a percentage. Motion normalizes across hardware too — a PIR that self-clears in 5 seconds and a radar sensor that holds "on" for 20 minutes both draw the same way: a short flash, then a graduated fade the longer it's been quiet. (Motion also stays quiet for a few minutes right after an HA restart, since a just-restored sensor's last change is the boot moment, not a real trigger.)
 
 **Outdoor gear** — anything whose HA area is on an Outside floor (a shed, the garden, the driveway) doesn't have a floor of its own to draw on. Drop its pin, or queue it and tap the map, on any real floor plate right where it sits *outside* the room it lives beside — that's where it belongs on Atlas, and nothing already saved moves if you're revisiting this after placing it before this existed.
 
@@ -61,7 +61,7 @@ Atlas is tuned for touch, not just a mouse: pinch-zoom is the map's own gesture 
 
 ## What's in a name
 
-Atlas used to be called "Lights" — both the Mapping tab and the standalone sidebar panel. It outgrew that name once motion, temperature, humidity, air-quality, locks and doors joined lighting on the same map, and "Bright" was already taken (that's the name of the licence tier that gates part of this map, and of the separately-distributed PadSpan Bright edition). The device-class filter chip that isolates light fixtures from everything else on the map is still called "Lights" — that's a different, narrower thing keeping its own name.
+Atlas used to be called "Lights" — both the Mapping tab and the standalone sidebar panel. It outgrew that name once motion, temperature, humidity, air-quality, flood, locks and doors joined lighting on the same map, and "Bright" was already taken (that's the name of the licence tier that gates part of this map, and of the separately-distributed PadSpan Bright edition). The device-class filter chip that isolates light fixtures from everything else on the map is still called "Lights" — that's a different, narrower thing keeping its own name.
 
 ## Where to go next
 

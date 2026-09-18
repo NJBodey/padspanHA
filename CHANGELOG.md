@@ -4,6 +4,13 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.50 — Flood sensors, with a bright red ring radiating out while wet (2026-09-18)
+
+### Flood sensors
+- **Added:** flood/water-leak sensors join the Atlas map as their own class (K-series codes, bright red glyph) — placed, moved and selected exactly like motion, temperature, humidity or air quality. HA's own device_class for this is "moisture". A wet sensor draws a bright red ring radiating outward from its placed point, sweeping through its room — the same "make the room react" idea air quality's rising bars use, but binary rather than a graded scale: either wet right now, or nothing drawn at all. A room or floor with an active flood sensor calls it out in its aggregate sheet's summary line ("⚠ Flood ×N"), the same way Motion and Air already do. Deliberately excluded from the stuck-state health check motion and door/window get: an ongoing leak *should* keep alarming for hours, not get quietly flagged as "probably a hardware fault."
+
+---
+
 ## 0.38.49 — Busy Times and Locate, two new PadSpan Pro tabs (2026-09-18)
 
 ### Busy Times

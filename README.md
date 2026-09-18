@@ -133,7 +133,7 @@ For devices where you can't get an IRK, the experimental **MAC Rotation Bridging
 
 ### Atlas — The Device Map
 Formerly "Lights" — renamed because it outgrew the name. One isometric map of every floor, drawn the way an electrician draws a lighting plan, for placing and controlling real devices rather than just tracking BLE:
-- **Fixtures** — lights, fans, locks, and motion, temperature, humidity and air-quality sensors, each placed at their real position, shape, size and rotation
+- **Fixtures** — lights, fans, locks, and motion, temperature, humidity, air-quality and flood sensors, each placed at their real position, shape, size and rotation
 - **WLED control** — brightness, colour and effects live from the map
 - **Outdoor gear** — anything HA puts on an Outside floor (shed, garden, driveway) places on the real floor plate just outside the room it lives beside, instead of falling off the map
 - **Doors & windows** as real RF barriers — material-aware attenuation (steel blocks harder than hollow-core), live open/closed state, and an **Invert** toggle for a sensor that reports backwards
