@@ -176,6 +176,21 @@ footer .links{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin
 
     <div class="relitem">
       <div class="relhead">
+        <span class="relver">v0.38.48</span>
+        <span class="pill stable">Stable</span>
+        <span class="reldate">17 September 2026</span>
+      </div>
+      <div class="relbody">
+        <ul>
+          <li><b>Fixed:</b> on a touchscreen, the Atlas map's own pinch-zoom competed with the browser's own native pinch-zoom for the same gesture — the browser usually won, changing the whole page's zoom instead of the map's, and the resulting layout reflow could silently reset wherever you'd just panned to.</li>
+          <li><b>Fixed:</b> the Atlas map rebuilds itself completely fresh on every periodic refresh (not just when something it draws changes) — a fresh rebuild always started back at the top-left, discarding your pan position within seconds of setting it, independently of the pinch-zoom fix above.</li>
+          <li><b>Fixed:</b> with Automorph's aura replacing a fixture's plain icon, the actual tappable area had stayed pinned to a small fixed circle at the fixture's anchor point since 2026-09-11 — regardless of how large the visible aura painted. The click target now matches the aura's own shape.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="relitem">
+      <div class="relhead">
         <span class="relver">v0.38.47</span>
         <span class="pill soon">Beta channel</span>
         <span class="reldate">17 September 2026</span>

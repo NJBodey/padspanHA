@@ -4,6 +4,15 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.48 — Atlas: pinch-zoom stops fighting itself, and the click target matches what's on screen (2026-09-17)
+
+### Atlas touch
+- **Fixed:** on a touchscreen, the Atlas map's own pinch-zoom competed with the browser's own native pinch-zoom for the same gesture — the browser usually won, changing the whole page's zoom instead of the map's, and the resulting layout reflow could silently reset wherever you'd just panned to.
+- **Fixed:** the Atlas map rebuilds itself completely fresh on every periodic refresh (not just when something it draws changes) — a fresh rebuild always started back at the top-left, discarding your pan position within seconds of setting it, independently of the pinch-zoom fix above.
+- **Fixed:** with Automorph's aura replacing a fixture's plain icon, the actual tappable area had stayed pinned to a small fixed circle at the fixture's anchor point since 2026-09-11 — regardless of how large the visible aura painted. The click target now matches the aura's own shape.
+
+---
+
 ## 0.38.47 — Ten near-identical Automorph styles replaced with six real new ones (2026-09-17)
 
 ### Automorph
