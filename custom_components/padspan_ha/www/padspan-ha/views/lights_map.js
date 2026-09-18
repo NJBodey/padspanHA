@@ -522,13 +522,33 @@ export function wireHoverHud(isoDiv, opts){
     hud.style.left = `${Math.max(0, -a.left) + 6}px`;
   };
   let lastKey = "";
+  // The HUD is pinned at the top-left; a marker it names can be anywhere on
+  // the map. Every pointermove event on the way there — crossing empty
+  // canvas between the marker and the box — used to call show([], null),
+  // which hid the HUD on the very first such event, before the cursor could
+  // ever arrive (Garry, 2026-09-19: "how can I click on the mouse over???
+  // ...the message needs to linger so it can be clicked on when the mouse
+  // is moved"). A real "nothing at all" (crossing dead canvas, or genuinely
+  // leaving the stage) now gets a short grace window instead of an instant
+  // hide, cancelled the moment anything real — a device, a room, or the HUD
+  // itself — is back under the cursor.
+  const HIDE_GRACE_MS = 450;
+  let hideTimer = null;
+  const cancelHide = () => { if (hideTimer != null) { clearTimeout(hideTimer); hideTimer = null; } };
+  const hideNow = () => { cancelHide(); lastKey = ""; hud.hidden = true; };
   const show = (stack, room) => {
     place();
     const key = stack.join("|") + "#" + (room || "");
+    if (!stack.length && !room) {
+      if (hud.hidden) return;                       // already hidden — nothing to debounce
+      cancelHide();
+      hideTimer = setTimeout(() => { hideTimer = null; lastKey = ""; hud.hidden = true; }, HIDE_GRACE_MS);
+      return;
+    }
+    cancelHide();
     if (key === lastKey) return;
     lastKey = key;
     hud.innerHTML = "";
-    if (!stack.length && !room) { hud.hidden = true; return; }
     hud.hidden = false;
     if (stack.length) {
       hud.appendChild(mk("div", "lv-hoverhud-hit", [mk("span", "lv-hoverhud-k", "Click"), label(stack[0])]));
@@ -547,11 +567,13 @@ export function wireHoverHud(isoDiv, opts){
   };
   isoDiv.addEventListener("pointermove", (ev) => {
     if (ev.pointerType === "touch") return;
-    if (hud.contains(ev.target)) return;          // reading the HUD must not clear it
+    if (hud.contains(ev.target)) { cancelHide(); return; }   // reading the HUD must not clear it
     if (opts.isDragging && opts.isDragging()) return;
     show(stackAt(ev.clientX, ev.clientY), roomAt(ev.clientX, ev.clientY));
   });
-  isoDiv.addEventListener("pointerleave", () => show([], null));
+  // Genuinely leaving the stage IS an unambiguous "done" — no grace needed,
+  // unlike the mid-transit case show() itself now debounces.
+  isoDiv.addEventListener("pointerleave", hideNow);
   return stackAt;
 }
 
