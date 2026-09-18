@@ -25,7 +25,16 @@
  * frame-fitting is its own hard-won, easy-to-subtly-break pipeline
  * (docs/03_MAPPING_SUITE.md), and cramming a second concern into it is
  * exactly what Insights' own "not touched this pass" note was avoiding.
+ *
+ * PadSpan Pro — the underlying dwell data is already free (it's the same
+ * padspan_ha/insights_get Insights uses), so this is a presentation-layer
+ * gate, the same pattern Automorph and Showcase already use over otherwise-
+ * free Atlas data. No dedicated backend gate for that reason: gating
+ * insights_get itself would also break the free Insights tab.
  */
+
+const { tierAtLeast, currentTier } =
+  await import(`./editions.js${new URL(import.meta.url).search}`);
 
 let _cache = null, _loading = false, _error = null, _days = 7;
 
@@ -38,6 +47,11 @@ export function render(ctx) {
     helpBtn("busytimes"),
     el("span", { class: "muted", style: "font-size:11px" }, "which rooms are busiest, and when — aggregated across every tracked object"),
   ]));
+
+  if (!tierAtLeast(currentTier(ctx.state.settings), "pro")) {
+    root.appendChild(_buildProGateCard(ctx, "Busy Times"));
+    return root;
+  }
 
   const dayBtnEls = [1, 3, 7].map(d => {
     const b = el("button", { class: "btn tiny" }, `${d}d`);
@@ -217,5 +231,16 @@ function _buildBusyGrid(ctx, data) {
   const wrap = document.createElement("div");
   wrap.innerHTML = s;
   card.appendChild(wrap);
+  return card;
+}
+
+function _buildProGateCard(ctx, featureName) {
+  const { el } = ctx.helpers;
+  const card = el("div", { class: "card" });
+  card.appendChild(el("div", { style: "font-weight:700;font-size:16px;margin-bottom:6px" },
+    `${featureName} is a PadSpan Pro feature`));
+  card.appendChild(el("div", { class: "muted", style: "font-size:12px;margin-bottom:10px" },
+    "Unlock it, and everything else gated, with a PadSpan Pro key — or start a one-time 3-month free trial, no card required."));
+  card.appendChild(el("div", { class: "muted", style: "font-size:11px" }, "Settings → Features → PadSpan licence"));
   return card;
 }

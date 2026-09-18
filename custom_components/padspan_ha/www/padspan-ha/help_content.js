@@ -190,6 +190,16 @@ export const HELP = {
       "Busy Times aggregates every tracked object's dwell time into one room-by-room picture: how much total time each room was occupied over the last 1/3/7 days, and a 24-hour bar showing when in the day that room tends to get busy.",
       "Each room's box is tinted by its total occupied time relative to the busiest room in the selected range — darker means quieter, brighter orange/red means busier. The red bar in each room's 24-hour strip marks its single busiest hour.",
       "This is a different view of the same data Insights shows as tables: Insights is per-object, day-by-day detail; Busy Times is the room-level summary at a glance. Neither is the live RSSI signal-quality heatmap on the Overview map — that's about scanner coverage, not room activity.",
+      "Busy Times is a PadSpan Pro feature.",
+    ],
+  },
+  locate: {
+    title: "Locate — Which way to walk to find something",
+    body: [
+      "Locate answers \"which way do I walk from here to that\" without a compass or a camera. Pick which tracked device is yours — the same one your Phone Setup Wizard or IRK setup already tracks — and pick what you're looking for.",
+      "If you're in the same room already, Locate shows the live distance in metres between you, with \"getting closer\" or \"getting further\" as you move.",
+      "If you're in a different room, Locate walks a path over your drawn room-adjacency map (Mapping → Rooms) and tells you which room to head to next, with the full route shown as a trail. If a floor change is needed it says so up front. If no route is drawn between the two rooms yet, it tells you the target's room and floor so you can head there directly.",
+      "This deliberately does not use your phone's compass — indoors, near BLE scanners and building wiring, a magnetic compass is not reliable enough to trust. Locate is a PadSpan Pro feature, and needs \"you\" set to a tracked device to work at all.",
     ],
   },
 

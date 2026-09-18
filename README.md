@@ -2,7 +2,7 @@
 
 ### The most comprehensive BLE room-presence system for Home Assistant
 
-PadSpan™ HA goes far beyond "home or away." It tells you **which room** every Bluetooth device is in — updated every 5 seconds — with interactive floor plans, 3D multi-floor visualizations, a full calibration system, and 25 dedicated views. No other Home Assistant BLE integration comes close.
+PadSpan™ HA goes far beyond "home or away." It tells you **which room** every Bluetooth device is in — updated every 5 seconds — with interactive floor plans, 3D multi-floor visualizations, a full calibration system, and 26 dedicated views. No other Home Assistant BLE integration comes close.
 
 🌐 **Website: [padspan.traks.ca](https://padspan.traks.ca)**
 
@@ -128,7 +128,8 @@ For devices where you can't get an IRK, the experimental **MAC Rotation Bridging
 
 ### Analytics
 - **Insights** — per-object time-in-room and entry-count tables, plus peak concurrent occupancy, with CSV/JSON export
-- **Busy Times** — which rooms are busiest overall and by hour of day, aggregated across every tracked object over a 1/3/7-day range
+- **Busy Times** (PadSpan Pro) — which rooms are busiest overall and by hour of day, aggregated across every tracked object over a 1/3/7-day range
+- **Locate** (PadSpan Pro) — room-by-room wayfinding to any tracked device or person, from wherever your own tracked phone currently is; a live metre-distance readout once you're in the same room. No compass, no camera — routed over your own room-adjacency map, refreshed on every live poll like Follow
 
 ### Atlas — The Device Map
 Formerly "Lights" — renamed because it outgrew the name. One isometric map of every floor, drawn the way an electrician draws a lighting plan, for placing and controlling real devices rather than just tracking BLE:
@@ -145,7 +146,7 @@ See the [Atlas Guide](docs/ATLAS_GUIDE.md) for a full walkthrough. Placement, Au
 
 ### UI & Experience
 - **Pure Live mode** — immersive full-screen 3D dashboard with pan/zoom, floating glass overlays, and collapsible info panels
-- **25 dedicated views** with Basic and Advanced modes
+- **26 dedicated views** with Basic and Advanced modes
 - **5-step onboarding wizard** with auto-detection and progress tracking
 - Dark forest-green theme designed for always-on displays
 - Built-in **Training Hub** with 16 animated walkthroughs + full manual
@@ -189,7 +190,7 @@ See the [Atlas Guide](docs/ATLAS_GUIDE.md) for a full walkthrough. Placement, Au
 | Movement history playback | ✅ | — | — | — |
 | Sample/demo mode | ✅ | — | — | — |
 | Multi-language (11) | ✅ | — | — | — |
-| Dedicated UI views | 25 | Config flow | MQTT config | Web UI |
+| Dedicated UI views | 26 | Config flow | MQTT config | Web UI |
 | HA sensor entities | ✅ | ✅ | ✅ | ✅ |
 | Distance estimation | ✅ | ✅ | — | ✅ |
 | Kalman RSSI filtering | ✅ | — | — | — |
@@ -206,7 +207,7 @@ nothing to reconfigure.
 | Edition | Key | What it is |
 |---------|:---:|------------|
 | **PadSpan HA** | none | Everything above, free forever. |
-| **PadSpan Pro** | `pro` | Every gated feature in PadSpan HA — Atlas device placement (shape, size, angle, WLED, Automorph, Showcase), Forensics, and anything gated later. |
+| **PadSpan Pro** | `pro` | Every gated feature in PadSpan HA — Atlas device placement (shape, size, angle, WLED, Automorph, Showcase), Forensics, Busy Times, Locate, and anything gated later. |
 | [**PadSpan Bright**](https://github.com/gbroeckling/padspanBright) | none | A separate, lighter HACS listing generated from this same source — just the Atlas device map, for anyone who wants light control without the BLE presence tracking. |
 | **PadSpan Bright Pro** | `bright` | Bright's full Atlas toolset (placement, shapes, WLED, Automorph, Showcase), priced separately from PadSpan Pro. |
 
