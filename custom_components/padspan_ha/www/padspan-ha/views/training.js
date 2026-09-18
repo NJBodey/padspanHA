@@ -1894,6 +1894,12 @@ const MANUAL_SECTIONS = [
     helpKeys: ["insights"],
   },
   {
+    id: "help_busytimes",
+    title: "Busy Times",
+    icon: "🔥",
+    helpKeys: ["busytimes"],
+  },
+  {
     id: "help_monitor",
     title: "Monitor",
     icon: "🖥️",
