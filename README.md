@@ -144,7 +144,7 @@ See the [Atlas Guide](docs/ATLAS_GUIDE.md) for a full walkthrough. Placement, Au
 - **24 dedicated views** with Basic and Advanced modes
 - **5-step onboarding wizard** with auto-detection and progress tracking
 - Dark forest-green theme designed for always-on displays
-- Built-in **Training Hub** with 14 animated walkthroughs + full manual
+- Built-in **Training Hub** with 16 animated walkthroughs + full manual
 - **Sample mode** — fully functional demo with synthetic data, no hardware needed
 - **11 languages**: English, Spanish, French, German, Italian, Portuguese, Dutch, Chinese, Japanese, Korean, Russian
 - Standalone calibration panel optimized for phone use during walk-around collection
@@ -261,7 +261,7 @@ No key yet? **Settings → Features → PadSpan licence** has a one-time 3-month
 | [WebSocket API](docs/02_WEBSOCKET_API.md) | API reference for custom integrations |
 | [Changelog](CHANGELOG.md) | Full version history |
 
-The **Training Hub** inside PadSpan has 14 animated walkthroughs covering every feature — from BLE basics to Private BLE/IRK setup.
+The **Training Hub** inside PadSpan has 16 animated walkthroughs covering every feature — from BLE basics to Private BLE/IRK setup.
 
 ---
 

@@ -139,7 +139,7 @@ Record the real headcount in the view to keep it beside what the estimate said.
 - **Atlas** — Place lights, fans, sensors, locks and doors on the same map (Pro feature) — see the [Atlas Guide](ATLAS_GUIDE.md)
 - **Calibration** — Run the calibration walkthrough (Training Hub → Calibration) for sub-room accuracy
 - **Basic vs Advanced** — Toggle between simplified and full views (top-right toggle)
-- **Training Hub** — 14 animated walkthroughs covering every feature
+- **Training Hub** — 16 animated walkthroughs covering every feature
 - **Settings** — Customize appearance, scanner offsets, presence thresholds, experimental features
 - **History & Traceback** — Review movement history with NVR-style playback on the 3D map
 
