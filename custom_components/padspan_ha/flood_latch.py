@@ -44,6 +44,7 @@ floodLatchActive() is its JS mirror and must be kept in the same shape —
 change one, change both.
 """
 
+import functools
 import logging
 import time
 from typing import Any
@@ -103,8 +104,15 @@ def async_setup_flood_latch(hass: HomeAssistant) -> None:
     dom = hass.data.setdefault(DOMAIN, {})
     if dom.get(_DATA_UNSUB):
         return
+    # functools.partial, NOT a lambda: HA's dispatcher unwraps partial to find
+    # the @callback marker on _on_state_changed and runs it straight on the
+    # event loop. A lambda wrapper is a distinct, unmarked function — HA then
+    # hands it to a worker thread instead, where the async_create_task below
+    # is illegal and raises (verified live, 2026-09-18: every trigger threw
+    # "calls hass.async_create_task from a thread other than the event loop"
+    # and silently never wrote the latch — this is why nothing ever latched).
     dom[_DATA_UNSUB] = hass.bus.async_listen(
-        "state_changed", lambda event: _on_state_changed(hass, event)
+        "state_changed", functools.partial(_on_state_changed, hass)
     )
 
 
