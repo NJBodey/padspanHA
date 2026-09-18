@@ -4,6 +4,16 @@ All notable changes to PadSpan HA are documented here.
 
 ---
 
+## 0.38.49 — Busy Times and Locate, two new PadSpan Pro tabs (2026-09-18)
+
+### Busy Times
+- **Added:** a room-by-room heat view of aggregate historical activity across every tracked object — total occupied time per room over the last 1/3/7 days, tinted from quiet to busy, with a 24-hour bar per room marking its single busiest hour. Built from the same data Insights already shows as tables (`padspan_ha/insights_get`); no new backend. A different lens than the live RSSI heatmap (scanner signal quality, not room activity) or Traceback (single-device history). PadSpan Pro — the underlying data stays free via Insights; this is a presentation-layer gate, the same pattern Automorph and Showcase already use over otherwise-free Atlas data.
+
+### Locate
+- **Added:** room-graph wayfinding. Pick which tracked device is yours and what you're looking for; Locate tells you which room to head to next, routed over your own room-adjacency map (Mapping → Rooms), refreshed on every live poll the same way Follow already is. Once you're in the same room it switches to a live metre-distance readout with a "getting closer"/"getting further" delta against the previous poll. Deliberately not camera-AR or compass-driven: no UWB hardware to do angle-of-arrival, and no reason to trust a phone's magnetic compass indoors, near BLE scanners and building wiring — this works the same on a wall-mounted kiosk with no camera as it does on your own phone. PadSpan Pro; "you" is a new setting (`locate_self_key`), refused server-side below Pro the same way `forensics_enabled` already is.
+
+---
+
 ## 0.38.48 — Atlas: pinch-zoom stops fighting itself, and the click target matches what's on screen (2026-09-17)
 
 ### Atlas touch
