@@ -1422,3 +1422,171 @@ packaging decision, not a rebuild: collapsing Bright into a BLE toggle
 inside one product removes a SKU axis pricing research says is actively
 costing conversions, and resolves an identity question the codebase
 itself has already been signaling isn't clean (§4.3/§J).
+
+
+---
+
+## 8. Outside HA, Consumer & Luxury Tier: "Digital Twin of a Home" Competitive Landscape
+
+Garry's brief named this angle specifically: "The competitive landscape
+for 'a complete visual, interactive digital twin of a home with device
+control' ... Apple Home's roadmap ... Google/Nest's home visualization
+direction, SmartThings Map View ..., Josh.ai, high-end integrator
+platforms (Control4, Savant, Crestron) ... and any startup specifically
+pitching 'digital twin for your house.'" Run independently of §§1-7 above
+(live web search, 2026-09-18/19). Full sourced write-up, all findings
+below plus additional detail: [docs/research/digital-twin-competitive-landscape-phase2.md](research/digital-twin-competitive-landscape-phase2.md).
+This converges with §6/§7's own conclusions on one point (no incumbent
+combines PadSpan's exact bundle) but surfaces a genuinely new, high-
+leverage finding neither of those angles turned up: a repeated
+**automated-geometry-acquisition** pattern across every serious
+competitor, which Atlas's current all-manual placement workflow doesn't
+have.
+
+**SmartThings Map View (Samsung, CES 2024, live now)** ships **four**
+separate floor-plan generation paths, manual sketch being only the
+fallback: LiDAR scan via Samsung robot vacuums/Ballie (which can place
+devices automatically as part of the scan), address lookup against public
+floor-plan data, photo-of-a-paper-plan-to-3D conversion, and manual sketch
+last. Devices render in 3D at their real position on phone/tablet/TV/
+fridge. ([SmartThings blog](https://blog.smartthings.com/smartthings-updates/smartthings-revolutionizes-home-visualization-with-introduction-of-map-view/), [Samsung Newsroom](https://news.samsung.com/us/smartthings-revolutionizes-home-visualization-with-introduction-of-map-view))
+
+**Apple** has no shipped floor-plan/spatial-layout feature in the Home
+app, and nothing on its public 2026-2028 hardware roadmap (HomePad hub,
+camera, doorbell, tabletop robot) points at one — but Apple has owned the
+enabling capability since 2022: **RoomPlan** (ARKit/RealityKit), a free,
+on-device Swift API that turns a LiDAR iPhone/iPad scan into a parametric
+3D room model — walls, doors, windows, furniture — already used by
+third-party real-estate/contractor/interior-design apps for exactly this
+job. Nobody has pointed it at smart-home device placement specifically.
+([Apple ML Research — RoomPlan](https://machinelearning.apple.com/research/roomplan), [RoomPlan docs](https://developer.apple.com/documentation/roomplan), [9to5Mac roadmap](https://9to5mac.com/2026/08/15/apple-home-product-roadmap-tv-homepod-smart-display/))
+
+**Google Home/Nest** — no spatial-mapping direction found at all; visible
+investment is in camera-vision-triggered automation, not spatial
+representation. A genuine negative finding, not a search gap. ([9to5Google](https://9to5google.com/2026/05/13/google-home-display-appearance/))
+
+**Josh.ai** markets an "auto-generated floor plan" with device
+auto-discovery, but no independent documentation of the actual mechanism
+was found — flagged explicitly as an **unverified marketing claim**, not
+confirmed fact. ([Josh.ai](https://josh.ai/))
+
+**Savant TrueImage** — already noted in §6 as "the closest existing
+consumer metaphor to device-on-a-map control"; this pass adds the
+mechanism detail: the installer/homeowner photographs the actual room or
+fixture, and that literal photo becomes the live control surface —
+tapping the real light **in the photo** dims it, and the photo's
+rendered brightness/colour updates live to mirror the physical state.
+Photorealism-of-your-actual-room as the control surface, not a schematic
+map — the opposite representation choice from Atlas's stylized
+Automorph/Showcase layers, and a paradigm PadSpan hasn't considered
+either way (adopt a scoped version, or consciously reject it). Likely
+IP/brand-protected as implemented; the transferable part is the paradigm.
+([Savant Knowledge Base — TrueImage](https://support.savant.com/lighting/?c=Savant_Knowledge:TrueImage))
+
+**Matterport + SIM-ON (SIMLAB)** — professionally captured 3D real-estate
+scan plus a live IoT control overlay (lighting, climate, security, KNX).
+**This is, today, the closest existing product to "a complete visual,
+interactive digital twin of a home with device control"** — but sold to
+property managers/short-term-rental operators via professional 3D-camera
+capture, a different customer and capture method than PadSpan's
+DIY-homeowner, phone-or-manual, free/open model. Validates the category
+commercially without being a direct competitor for PadSpan's users.
+([Matterport/SIMLAB case study](https://matterport.com/industries/case-studies/simlab-integrates-bim-and-smart-building-iot-technologies-matterport), [SIM-ON](https://sim-on.com/))
+
+**Digs** — ~$20M pre-Series A, ~10,000 homes on platform, backed by SPLY
+Capital et al. Its "3D digital twin" is explicitly a **static property
+record** (plans, warranties, install dates, photoreal renderings) marketed
+as "CarFax for the home" — nothing to do with live device control. Matters
+because it's a large, funded company using the identical phrase "digital
+twin of a home" for an unrelated job — direct evidence for why PadSpan
+should stop using "digital twin" unqualified (it invites this exact
+collision, for no benefit). ([PR Newswire](https://www.prnewswire.com/news-releases/digs-tops-off-nearly-20-million-pre-series-a-funding-to-solidify-position-as-leading-ai-platform-for-home-builders-302606693.html))
+
+**What "digital twin" means in the literature** — per IBM and the
+digital-twin literature, the trait separating a digital twin from a
+dashboard is a persistent, **predictive/simulation-capable** connection
+("what will happen," not just "what is happening"). By that bar, PadSpan
+today (Atlas, Automorph, Locate, Insights) is a sophisticated **live-state
+visualization and control platform**, not yet a digital twin —
+Insights/Busy Times is backward-looking, not predictive. A real and
+valuable category on its own terms; just not the one the term claims.
+([IBM — What is a Digital Twin?](https://www.ibm.com/think/topics/digital-twin))
+
+**AR overlay control** (point phone/glasses at a device, see live status
+overlaid) — real research prototypes exist, no dominant shipped consumer
+product found. Flagged as an emerging pattern worth re-checking in 6-12
+months, evidence quality materially weaker than the findings above, not a
+current gap.
+
+**Confirms/challenges, explicitly:**
+- **CONFIRMS** the core bet independently, at every market tier: Samsung
+  (consumer), Savant (luxury), Matterport+SIMLAB (real estate/property
+  management) all converged on "a visual, spatial, living map of the
+  house tied to live device state" — three unrelated, well-capitalized
+  companies, not PadSpan reasoning in isolation.
+- **CONFIRMS** — consistent with §6/§7 — a genuinely undefended niche:
+  none of the above fuse BLE-trilaterated human *presence* into the same
+  map as device placement, and none place devices at measured
+  centimetre accuracy (SmartThings/Matterport are qualitative/dollhouse-
+  scale). Atlas + PadSpan's BLE fabric together is unoccupied territory.
+- **CHALLENGES, and this is the sharpest new finding of this pass**: the
+  single most consistent pattern across every serious competitor
+  (Samsung, Matterport, Apple's own dormant RoomPlan) is **automated
+  geometry acquisition** — scan, address lookup, photo-to-3D, or
+  professional capture — with manual entry as a fallback, not the only
+  path. Atlas's placement workflow is manual centimetre entry with no
+  automated fallback-*from* at all — the field has moved past this, and
+  it's a more consequential gap than the next device class.
+- **CHALLENGES the self-description, not the product**: "digital twin"
+  unqualified both overclaims (no predictive/simulation layer exists,
+  per the IBM definition) and collides with Digs' unrelated, funded use
+  of the identical phrase. PadSpan's real differentiator (BLE-fused,
+  cm-accurate live map) doesn't need the term.
+- **CHALLENGES the assumed threat tier**: Control4/Savant/Crestron are a
+  different price/install tier, not a realistic threat to a free HACS
+  integration. Consistent with §6's own finding, the nearer pressure is
+  inside HA's own ecosystem (Picture Elements, community floor-plan
+  cards) — already noted there, not re-litigated here.
+
+**Verdict on this angle:** on the core question — is PadSpan on the right
+path pursuing a visual, spatial, device-and-presence map, rather than
+just adding device classes — **yes**, and independently confirmed at
+every market tier researched, not merely agreeing with the premise. The
+correction is specific and actionable: the "killer feature" this angle
+turned up is **automated geometry acquisition** (concretely buildable
+today via Apple's free, on-device, already-proven-in-third-party-apps
+RoomPlan API — scan a room once, hand Atlas a starting geometry to
+fine-tune instead of a blank canvas and a ruler), not another Atlas
+device class, and it's more consequential to trajectory than whichever
+device class is next in line. Two lower-urgency, evidence-backed
+secondary findings: PadSpan's own Insights/Busy-Times historical data is
+a real, currently unexploited asset (no competitor found exposes anything
+predictive to end users — closing that gap is the one move that would
+make "digital twin" literally true rather than aspirational), and Savant
+TrueImage's photo-as-control-surface paradigm deserves a deliberate
+stance rather than remaining an unconsidered option.
+
+**Added to the gap list (§4), continuing the numbering:**
+- **4.10 — No automated geometry-acquisition path for Atlas placement.**
+  100% manual cm entry today; every serious competitor researched has at
+  least one automated capture path. The single most research-validated
+  gap in this entire report across all angles.
+- **4.11 — "Digital twin" as unqualified self-description invites two
+  avoidable category collisions** — with predictive-simulation twins
+  (PadSpan has no forward/what-if capability) and with Digs' static
+  property-record twin (same phrase, unrelated product) — for no benefit
+  to the actual pitch.
+
+**Added to the Phase 2 plan (§5):**
+- **Phase 2j — Scan-to-place: a RoomPlan-based capture companion for
+  Atlas** (addresses 4.10). Spec/prototype a flow where a user scans a
+  room once with a LiDAR iPhone/iPad via Apple's free RoomPlan API,
+  exports wall/door/window geometry, and Atlas ingests it as a starting
+  placement to fine-tune rather than build from a blank canvas. *Verify:*
+  scan one real room, measure time-to-usable-placement against the
+  current manual workflow for the same room.
+- **Phase 2k — Positioning correction** (addresses 4.11): drop
+  unqualified "digital twin" from README/marketing copy in favour of the
+  language that claims PadSpan's actually-undefended territory
+  (BLE-fused, centimetre-accurate, live device *and* presence map).
+  *Verify:* README/marketing copy reviewed against this framing.
