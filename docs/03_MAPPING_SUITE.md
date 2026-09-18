@@ -40,8 +40,14 @@ scanner's own floor, never absolute), mark lost/disabled, resync from HA.
 
 **Barriers** — RF attenuation walls in metres, with a material and a dB value.
 
-**Lights** — placement is a PadSpan Pro feature; shapes and codes render from
-the fabric.
+**Lights (Atlas)** — placement is a PadSpan Pro feature; shapes and codes
+render from the fabric. Motion, temperature, humidity, air-quality, lock and
+door/window classes share the same placement path and fabric storage as
+lights — see `views/lights_map.js` and [ATLAS_GUIDE.md](ATLAS_GUIDE.md) for
+the user-facing surface. Automorph and Showcase (`lights_automorph_*`,
+`lights_showcase*` in `settings_store.py`) are presentation settings, not
+fabric data — they change how a fixture's already-stored position is drawn,
+never the position itself.
 
 **Measure** — the reference distance that anchors a photo to metres. A map with
 no reference measurement has no scale, and calibration points captured on it

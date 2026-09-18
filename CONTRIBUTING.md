@@ -30,7 +30,7 @@ template. Describe your use case so we understand *why* the feature matters.
 - **Python** -- Follow standard Home Assistant conventions (`black`, `isort`,
   type hints where practical).
 - **JavaScript** -- Vanilla JS, no frameworks. The frontend lives in
-  `www/padspan-ha/` (panel.js + views/).
+  `custom_components/padspan_ha/www/padspan-ha/` (panel.js + views/).
 
 ## Pull Request Process
 
