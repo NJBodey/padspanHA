@@ -176,6 +176,20 @@ footer .links{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin
 
     <div class="relitem">
       <div class="relhead">
+        <span class="relver">v0.38.51</span>
+        <span class="pill soon">Beta channel</span>
+        <span class="reldate">18 September 2026</span>
+      </div>
+      <div class="relbody">
+        <ul>
+          <li><b>Fixed:</b> the Mapping tab's inspector panel still showed a Turn On/Off button for a placed flood sensor — harmless (nothing on the other end of a click would have done anything), but wrong for a read-only class, the same gap 0.38.42 closed for motion/temperature/humidity/air quality. This is a second, independent copy of that exclusion list (maps.js's own inspector, not lights_map.js's row rendering) that 0.38.50 missed.</li>
+          <li><b>Changed:</b> the class relabeled Emergency in the Atlas filter chip, the room/floor aggregate sheet's summary line, the shape legend and the read-only state tooltip — reads as urgent at a glance, matching the bright red ring it draws. The underlying device_class ("moisture"), code series (K-series) and everything else from 0.38.50 are unchanged.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="relitem">
+      <div class="relhead">
         <span class="relver">v0.38.50</span>
         <span class="pill soon">Beta channel</span>
         <span class="reldate">18 September 2026</span>
