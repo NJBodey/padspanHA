@@ -219,6 +219,51 @@ export function isLock(l) {
   return String(l.entity_id || "").startsWith("lock.");
 }
 
+// ── Device-class registry (Phase 2a, docs/PHASE2_STRATEGIC_REVIEW.md §5) ───
+// One row per non-light sensor/actuator class, declaring the capabilities
+// that used to be their own hand-maintained exclusion list, copied wherever
+// it was needed — the flood-sensor feature alone (adding ONE class) cost
+// ~25 edit sites across 4 files, because there was no single place "which
+// classes are read-only, which cast light, which need this exclusion" was
+// declared once. `castsLight` below is the first capability migrated onto
+// this table; light_codes.js is the right home for it (light_codes.js has
+// no imports from any of its consumers, so none of them can end up
+// importing it back — iso_lights.js, lights_map.js and maps.js already
+// import border colours from here, this is the same relationship).
+//
+// flagKey: the l.isX property assignLightCodes sets — null for "light" and
+// "strip" (wled/partition), which have no single boolean of their own.
+export const DEVICE_CLASSES = [
+  { key: "light",     flagKey: null,          castsLight: true  },
+  { key: "wled",      flagKey: "isWled",      castsLight: true  },
+  { key: "partition", flagKey: "isPartition", castsLight: true  },
+  { key: "fan",       flagKey: "isFan",       castsLight: false },
+  { key: "motion",    flagKey: "isMotion",    castsLight: false },
+  { key: "door",      flagKey: "isDoor",      castsLight: false },
+  { key: "flood",     flagKey: "isFlood",     castsLight: false },
+  { key: "air",       flagKey: "isAir",       castsLight: false },
+  { key: "temp",      flagKey: "isTemp",      castsLight: false },
+  { key: "humidity",  flagKey: "isHumidity",  castsLight: false },
+  { key: "lock",      flagKey: "isLock",      castsLight: false },
+];
+// Classes whose flagKey is false for `l` — i.e. classes with no light/aura
+// treatment. Built once from the table above, not hand-retyped per caller.
+const _NO_LIGHT_FLAG_KEYS = DEVICE_CLASSES.filter(c => !c.castsLight && c.flagKey).map(c => c.flagKey);
+// Does this fixture cast a light aura/pool/glow at all? False for every
+// sensor/actuator class (motion, door, flood, air, temp, humidity, lock,
+// fan) — true for an actual light (plain, WLED, or partition). Replaces 7
+// independent copies of the same exclusion chain in iso_lights.js (grepped
+// directly, §I of the strategic review) plus more in lights_map.js and
+// maps.js — some of those 7 had drifted to omit `isLock` (locks report
+// state "locked"/"unlocked"/"jammed", never "on", so 2 of the 7 were
+// already harmless in practice via their own separate `state==="on"` gate;
+// the other 2 were not state-gated and really would have auraed a lock —
+// corrected here, verified against the full render-determinism suite).
+export function castsLight(l) {
+  if (!l) return true;
+  return !_NO_LIGHT_FLAG_KEYS.some(k => l[k]);
+}
+
 // Health — a device can be reachable and still not actually be DOING its
 // job. What "healthy" means differs by class, so this isn't one check:
 //

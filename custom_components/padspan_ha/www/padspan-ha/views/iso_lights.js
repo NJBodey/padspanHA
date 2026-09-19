@@ -19,7 +19,7 @@
 // metres, and now that is the only thing it reads.
 
 const { WLED_BORDER, PARTITION_BORDER, FAN_BORDER, MOTION_BORDER, MOTION_PULSE, TEMP_BORDER, LOCK_BORDER, DOOR_BORDER,
-        AIR_BORDER, HUMIDITY_BORDER, FLOOD_BORDER, airQualityBadness } =
+        AIR_BORDER, HUMIDITY_BORDER, FLOOD_BORDER, airQualityBadness, castsLight } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 
 function escSVG(s){ return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
@@ -2765,7 +2765,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
   const liveRoomColor=(rname,fallback)=>{
     if(!SHOW) return fallback;
     const onLights=(byRoom[rname]||[]).filter(li=>
-      li.state==="on" && !hiddenEids.has(li.entity_id) && !li.isFan && !li.isMotion && !li.isTemp && !li.isAir && !li.isHumidity && !li.isLock && !li.isFlood);
+      li.state==="on" && !hiddenEids.has(li.entity_id) && castsLight(li));
     if(!onLights.length) return fallback;
     let rSum=0,gSum=0,bSum=0,wSum=0;
     for(const li of onLights){
@@ -2787,12 +2787,12 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
   if(SHOW){
     for(const l of lights){
       const li=lightsByEid[l.eid];
-      if(!li || li.state!=="on" || hiddenEids.has(l.eid) || li.isFan || li.isMotion || li.isTemp || li.isAir || li.isHumidity || li.isLock || li.isFlood) continue;
+      if(!li || li.state!=="on" || hiddenEids.has(l.eid) || !castsLight(li)) continue;
       const c=(FIELD ? fieldColOf(l.x,l.y,l.z) : null) || glowCol(li,l.lp);
       if(!glowIds.has(c)) glowIds.set(c, `psglow_${glowIds.size}`);
     }
     for(const rname of Object.keys(byRoom||{})) for(const li of byRoom[rname]||[]){
-      if(li.state!=="on" || hiddenEids.has(li.entity_id) || li.isFan || li.isMotion || li.isTemp || li.isAir || li.isHumidity || li.isLock || li.isFlood) continue;
+      if(li.state!=="on" || hiddenEids.has(li.entity_id) || !castsLight(li)) continue;
       const rc=FIELD && roomCentre.get(rname);
       const c=(rc ? fieldColOf(rc[0],rc[1],rc[2]) : null) || glowCol(li, null);
       if(!glowIds.has(c)) glowIds.set(c, `psglow_${glowIds.size}`);
@@ -3391,7 +3391,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         // center not activating on motion... only some sensors"): the
         // pulse ring is a separate code path and kept firing, but the
         // glyph itself had been swapped for a transparent hit rect.
-        if(!l || l.shape==="perimeter" || l.isMotion || l.isFan || l.isTemp || l.isAir || l.isHumidity || l.isFlood) continue;
+        if(!l || l.shape==="perimeter" || !castsLight(l)) continue;
         const r=hereRooms.find(rr=>pointInRoom(rr.pts, pl.x, pl.y));
         if(!r || r.pts.length<3) continue;
         const weight=automorphFixtureWeight(pl.lp&&pl.lp.width_cm, pl.lp&&pl.lp.height_cm);
@@ -4131,7 +4131,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       // Defensive twin of the exclusion in the partition-grouping pass
       // above — motion/fan/temp never get a cell there any more, but this
       // function must refuse to aura them even if ever called directly.
-      if(!(AUTOMORPH_PCT>0) || !room || room.pts.length<3 || l.isMotion || l.isFan || l.isTemp || l.isAir || l.isHumidity || l.isFlood) return null;
+      if(!(AUTOMORPH_PCT>0) || !room || room.pts.length<3 || !castsLight(l)) return null;
       // Inset stage — the shared automorphInsetRing above (smoothing,
       // well-spaced offset, fold pruning, containment, and the hardness cap
       // derived from the same margin). One inset constant was serving two
@@ -5219,7 +5219,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       if(l.state!=="on") return "";
       // Fans, motion sensors and temperature readouts are on the map, but
       // they are not light sources — nothing pools on the floor beneath them.
-      if(l.isFan||l.isMotion||l.isTemp||l.isAir||l.isHumidity||l.isFlood) return "";
+      if(!castsLight(l)) return "";
       const col=(fx&&fx.col)||glowCol(l,entry);
       const b=briOf(l);
       const beam=BEAM[l.shape]||1;
@@ -5833,7 +5833,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
         // Wall spill: every wall of the fixture's room its pool actually
         // reaches, faded by how far away the wall is.
         let spillSegs=null;
-        if(room && l.state==="on" && !l.isFan && !l.isMotion && !l.isTemp && !l.isAir && !l.isHumidity && !l.isFlood){
+        if(room && l.state==="on" && castsLight(l)){
           const reach=poolReachM(l)*0.8;
           for(let i=0,j=room.pts.length-1;i<room.pts.length;j=i++){
             const d=pointSegDist(pl.x, pl.y, room.pts[j], room.pts[i]);

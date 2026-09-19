@@ -4654,7 +4654,7 @@ def test_suppressed_glyph_hit_targets_stay_disjoint_for_two_crowded_fixtures(tmp
         "two neighbouring fixtures' hit targets must stay distinct, not one path for both", out)
 
 
-def test_automorph_never_auras_or_suppresses_motion_fan_or_temp_markers(tmp_path):
+def test_automorph_never_auras_or_suppresses_a_non_light_marker(tmp_path):
     """Live regression, reported by Garry (2026-09-08): "the center not
     activating on motion... only some sensors" — a motion sensor sharing a
     room with a real light was pulled into the non-overlap partition (only
@@ -4663,23 +4663,41 @@ def test_automorph_never_auras_or_suppresses_motion_fan_or_temp_markers(tmp_path
     sensors read activity through motionActive() + their own pulse ring
     (a separate code path, unaffected), never through an aura. The pulse
     kept firing; the glyph underneath it silently went transparent. Same
-    root cause for isFan/isTemp: neither was excluded either. A real light
-    in the SAME room still gets its normal aura+suppression."""
+    root cause for isFan/isTemp: neither was excluded either.
+
+    Phase 2a (docs/PHASE2_STRATEGIC_REVIEW.md §5): the exclusion this test
+    guards is now one function, castsLight() (light_codes.js), read at
+    every site that used to hand-list the excluded classes separately —
+    and two of those sites (automorph's fixture-grouping pass and its
+    "defensive twin") had silently drifted to omit isLock, checked and
+    fixed in the same commit that added castsLight(). Extended to cover
+    every class castsLight() excludes, not just the three the original bug
+    happened to hit — this is the "does the registry's contract actually
+    hold everywhere" test 4.4 of the strategic review calls for. A real
+    light in the SAME room still gets its normal aura+suppression."""
     NOW = 1_000_000_000_000
     model = {
-        "room_geometry_m": {"Room": {"type": "poly", "floor_id": "main", "points_m": [[0, 0], [6, 0], [6, 6], [0, 6]]}},
+        "room_geometry_m": {"Room": {"type": "poly", "floor_id": "main", "points_m": [[0, 0], [8, 0], [8, 8], [0, 8]]}},
         "light_positions_m": {
-            "light.real":              {"x_m": 1.5, "y_m": 1.5, "floor_id": "main"},
-            "binary_sensor.motion":    {"x_m": 4.5, "y_m": 1.5, "floor_id": "main"},
-            "fan.ceiling":             {"x_m": 1.5, "y_m": 4.5, "floor_id": "main"},
-            "sensor.temp":             {"x_m": 4.5, "y_m": 4.5, "floor_id": "main"},
+            "light.real":              {"x_m": 1, "y_m": 1, "floor_id": "main"},
+            "binary_sensor.motion":    {"x_m": 3, "y_m": 1, "floor_id": "main"},
+            "fan.ceiling":             {"x_m": 5, "y_m": 1, "floor_id": "main"},
+            "sensor.temp":             {"x_m": 7, "y_m": 1, "floor_id": "main"},
+            "lock.front_door":         {"x_m": 1, "y_m": 3, "floor_id": "main"},
+            "sensor.humidity":         {"x_m": 3, "y_m": 3, "floor_id": "main"},
+            "sensor.air":              {"x_m": 5, "y_m": 3, "floor_id": "main"},
+            "binary_sensor.flood":     {"x_m": 7, "y_m": 3, "floor_id": "main"},
         },
     }
     lbe = {
-        "light.real":           {"entity_id": "light.real", "state": "on", "code": "A01", "shape": "circle", "isMotion": False, "last_changed": None},
+        "light.real":           {"entity_id": "light.real", "state": "on", "code": "A01", "shape": "circle", "last_changed": None},
         "binary_sensor.motion": {"entity_id": "binary_sensor.motion", "state": "on", "code": "M01", "shape": "hex", "isMotion": True, "last_changed": None},
         "fan.ceiling":          {"entity_id": "fan.ceiling", "state": "on", "code": "F01", "shape": "hex", "isFan": True, "last_changed": None},
         "sensor.temp":          {"entity_id": "sensor.temp", "state": "on", "code": "T01", "shape": "hex", "isTemp": True, "last_changed": None},
+        "lock.front_door":      {"entity_id": "lock.front_door", "state": "locked", "code": "L01", "shape": "hex", "isLock": True, "last_changed": None},
+        "sensor.humidity":      {"entity_id": "sensor.humidity", "state": "on", "code": "H01", "shape": "hex", "isHumidity": True, "last_changed": None},
+        "sensor.air":           {"entity_id": "sensor.air", "state": "on", "code": "Q01", "shape": "hex", "isAir": True, "last_changed": None},
+        "binary_sensor.flood":  {"entity_id": "binary_sensor.flood", "state": "on", "code": "K01", "shape": "hex", "isFlood": True, "last_changed": None},
     }
     floors = [{"id": "main", "name": "Main", "level": 0}]
     out = _run_js(tmp_path, (
@@ -4696,12 +4714,54 @@ def test_automorph_never_auras_or_suppresses_motion_fan_or_temp_markers(tmp_path
         "  motionVisible: (b=>b?visible(b):null)(grab('binary_sensor.motion')),\n"
         "  fanVisible: (b=>b?visible(b):null)(grab('fan.ceiling')),\n"
         "  tempVisible: (b=>b?visible(b):null)(grab('sensor.temp')),\n"
+        "  lockVisible: (b=>b?visible(b):null)(grab('lock.front_door')),\n"
+        "  humidityVisible: (b=>b?visible(b):null)(grab('sensor.humidity')),\n"
+        "  airVisible: (b=>b?visible(b):null)(grab('sensor.air')),\n"
+        "  floodVisible: (b=>b?visible(b):null)(grab('binary_sensor.flood')),\n"
         "}));\n"
     ))
     assert not out["realVisible"], "the real light's glyph must still be suppressed by its own aura (unchanged behaviour)"
     assert out["motionVisible"], "a motion sensor's glyph body must never be suppressed — it must never be pulled into the partition or get an aura in the first place"
     assert out["fanVisible"], "a fan's glyph body must never be suppressed"
     assert out["tempVisible"], "a temp readout's glyph body must never be suppressed"
+    assert out["lockVisible"], "a lock's glyph body must never be suppressed — a lock does not cast light"
+    assert out["humidityVisible"], "a humidity readout's glyph body must never be suppressed"
+    assert out["airVisible"], "an air-quality readout's glyph body must never be suppressed"
+    assert out["floodVisible"], "a flood sensor's glyph body must never be suppressed"
+
+
+def test_iso_lights_never_hand_writes_a_second_castslight_exclusion_list():
+    """The architectural fitness function 4.4 of the strategic review calls
+    for: a cheap structural test that turns a silently-reintroduced
+    duplicate exclusion list into a CI failure instead of a live bug (the
+    isLock gap the test above regression-guards was exactly this — a hand-
+    retyped copy that drifted from its siblings). castsLight() (light_codes.js)
+    is now the one place iso_lights.js decides whether a fixture casts
+    light; nothing in this file should ever again OR/AND together 3+ of the
+    classes castsLight() excludes the way the 7 sites §I of the strategic
+    review counted used to.
+
+    Scoped to iso_lights.js only, and to castsLight()'s own flag set — this
+    does not yet cover lights_map.js/maps.js (other exclusion-list
+    dimensions there: border colour, turn-on/off eligibility) or every
+    class (isTemp+isHumidity legitimately co-occur for the shared
+    freshness-window readout, a different capability from castsLight and
+    not what this guards). Each remaining dimension gets its own guard as
+    it migrates onto the registry, not one that claims coverage it doesn't have.
+    """
+    src = _code_only((_VIEWS / "iso_lights.js").read_text(encoding="utf-8"))
+    flag_re = re.compile(r"\bis(?:Fan|Motion|Temp|Humidity|Lock|Flood)\b")
+    for i, line in enumerate(src.splitlines(), 1):
+        # The freshness-window grouping (isTemp+isHumidity only, no others)
+        # is a real, distinct, legitimate co-occurrence — not this smell.
+        flags = set(flag_re.findall(line))
+        if flags <= {"isTemp", "isHumidity"}:
+            continue
+        n = len(flag_re.findall(line))
+        assert n < 3, (
+            f"iso_lights.js:{i} hand-writes a {n}-flag class exclusion — "
+            f"use castsLight(l) from light_codes.js instead of a new copy: {line.strip()!r}"
+        )
 
 
 # ── Automorph material stack (the light/composition round of the 2026-09-07
