@@ -139,6 +139,54 @@ export function effectiveState(eid, reported, now = Date.now()){
   return { state: o.state, optimistic: true };
 }
 
+// The primary tap action — flip a light/fan/strip on or off, lock/unlock a
+// lock, refuse a read-only sensor — shared by both hosts (the sidebar's own
+// _toggle and the builder's Preview-as-sidebar/marker-tap toggle used to be
+// two independently hand-maintained copies; the builder's had never grown
+// the lock branch, so a lock's Turn On/Off button called `lock.turn_on` —
+// not a real HA service — and always failed). One copy, one lock branch,
+// one read-only-sensor message.
+export async function toggleEntity(hass, eid, { render, toast, shake } = {}){
+  if (!hass) return;
+  // Service domain is the entity's own: light.* -> light, fan.* -> fan.
+  const domain = String(eid).split(".")[0];
+  if (domain === "binary_sensor") { if (toast) toast("Sensors are read-only"); return; }
+  if (domain === "sensor") { if (toast) toast("Temperature, humidity and air quality sensors are read-only"); return; }
+  // lock.* has no on/off at all — "locked" is its normal state, lock/unlock
+  // its services.
+  const isLockDomain = domain === "lock";
+  // The EFFECTIVE state, not the raw HA one (Garry, 2026-09-11: a second tap
+  // inside the same optimistic window re-decided from state that hadn't
+  // caught up yet, so it silently repeated the first command instead of
+  // reversing it) — prefers the standing optimistic claim over a reported
+  // state that hasn't reconciled, so each tap toggles relative to what the
+  // marker is ACTUALLY showing.
+  const eff = effectiveState(eid, hass.states[eid]?.state).state;
+  const on = isLockDomain ? eff === "locked" : eff === "on";
+  // Optimistic: the marker flips NOW (this claim is read by both views, so
+  // the index row flips with it), and HA's next state reconciles it.
+  setOptimistic(eid, isLockDomain ? (on ? "unlocked" : "locked") : (on ? "off" : "on"));
+  if (render) render();
+  try {
+    // Off->on restores the level it was dimmed to — HA drops `brightness`
+    // while a light is off, so this comes from the shared memory above; a
+    // light that never reported one (or a switch, or a fan) sends none.
+    const data = { entity_id: eid };
+    if (!on && domain === "light") {
+      const bri = lastBrightness(eid);
+      if (bri !== null) data.brightness = bri;
+    }
+    const svc = isLockDomain ? (on ? "unlock" : "lock") : (on ? "turn_off" : "turn_on");
+    await hass.callService(domain, svc, data);
+    setTimeout(() => { if (render) render(); }, 600);
+  } catch (e) {
+    clearOptimistic(eid);
+    if (render) render();
+    if (shake) shake(eid);
+    if (toast) toast("Could not toggle " + eid, true);
+  }
+}
+
 // ── Device classes on the map ────────────────────────────────────────────────
 // The layer chips: the map keeps every class in view and DIMS the others,
 // because a fan's place on the ceiling is context for the light beside it.
@@ -758,13 +806,29 @@ export function openAggregateSheet(api, { title, sub, items, actions }){
     sheet.appendChild(row);
   }
   for (const l of items) {
-    const on = l.state === "on";
+    // A lock's "on" is "locked" — its state is never the string "on", so
+    // the generic on/off fallback below always read it as Off (found in the
+    // Phase 2a registry audit, 2026-09-19: a locked lock's row read "Off"
+    // and got an On/Off button whose label logic could never agree with a
+    // lock's real state, even once the toggle itself started working).
+    const on = l.isLock ? l.state === "locked" : l.state === "on";
     const row = mk("div", _S.row);
     const col = classBorder(l, "#52b788");
     row.appendChild(mk("span", _S.code + `;color:${col}`, l.code));
     row.appendChild(mk("span", _S.name, l.friendly_name));
     if (l.isMotion) {
       row.appendChild(mk("span", _S.state(on), on ? "MOTION" : "clear"));
+    } else if (l.isLock) {
+      row.appendChild(mk("span", _S.state(l.state === "jammed" ? false : on),
+        l.state === "jammed" ? "JAMMED" : (on ? "LOCKED" : "UNLOCKED")));
+      const b = mk("button", _S.onoff(on), on ? "Unlock" : "Lock");
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const wasOn = b.textContent === "Unlock";
+        api.toggle(l.entity_id);
+        b.style.cssText = _S.onoff(!wasOn); b.textContent = wasOn ? "Lock" : "Unlock";
+      });
+      row.appendChild(b);
     } else if (l.isTemp) {
       row.appendChild(mk("span", _S.state(false), Number.isFinite(l.temperature) ? `${l.temperature}°` : "—"));
     } else if (l.isHumidity) {
@@ -850,14 +914,26 @@ export function openRoomSheet(api, lights, room, onlyEids){
   }
   openAggregateSheet(api, { title: only ? `Unplaced in ${room}` : room, sub: parts.join(" · "), items, actions });
 }
+// Read-only info classes the floor sheet always lists — not already counted
+// via lightEids/fanEids, and not conditional the way motion/air/flood are
+// just above (those earn their own clause because they also drive the
+// summary line's word). By class key, so a new always-show class is one
+// entry here, not another hand-typed flag on the filter line.
+const _FLOOR_SHEET_ALWAYS = new Set(["door", "temp", "humidity", "lock"]);
 export function openFloorSheet(api, lights, model, z){
   const floors = (model && model.floors) || [];
   const f = floors.find(x => Number(x.level) === Number(z));
   const fid = f ? String(f.id) : null;
   if (!fid) { api.toast("No floor record for this storey"); return; }
   const agg = floorAggregate(lights, model, fid, api.floodLatches);
+  // The room sheet shows every class via agg.all; this hand-typed inclusion
+  // list only ever named lights/fans/active-motion/air/alarming-flood, so a
+  // door, temp, humidity or lock on this floor never appeared here at all —
+  // found in the Phase 2a registry audit, 2026-09-19. By class KEY, not by
+  // flag, so this stays one line however many classes end up in the set.
   const items = lights.filter(l => agg.lightEids.includes(l.entity_id) || agg.fanEids.includes(l.entity_id) || (l.isMotion && l.state === "on")
-    || (l.isAir && lightFloorId(l, model) === String(fid)) || (l.isFlood && floodIsAlarming(l, api.floodLatches) && lightFloorId(l, model) === String(fid)));
+    || (l.isAir && lightFloorId(l, model) === String(fid)) || (l.isFlood && floodIsAlarming(l, api.floodLatches) && lightFloorId(l, model) === String(fid))
+    || (_FLOOR_SHEET_ALWAYS.has(lightClassOf(l)) && lightFloorId(l, model) === String(fid)));
   const parts = [`Lights ${agg.lightsOn}/${agg.lightsTotal}`];
   if (agg.fansTotal) parts.push(`Fans ${agg.fansOn}/${agg.fansTotal}`);
   if (agg.motionActive) parts.push(`Motion ×${agg.motionActive}`);
@@ -1422,12 +1498,18 @@ export function ensureLightsRegistry(store, hass, areas, onLoaded){
           // Air-quality sensors (2026-09-14) ride the same admission — the
           // same class set gatherLights uses — or "Assign room…" would save
           // in HA and never move the Q-tile, the 2026-09-03 bug all over again.
-          // Humidity (2026-09-15): same reasoning, same fix.
+          // Humidity (2026-09-15): same reasoning, same fix. Lock (found in
+          // the Phase 2a registry audit, 2026-09-19): the SAME bug, a fourth
+          // time — lock.* has ridden gatherLights' own admission since gap
+          // #8, but this SEPARATE copy never grew a lock clause, so a lock's
+          // "Assign room…" visibly saved (HA's own registry had it) and the
+          // lock never left "no room" — this areaMap is the only source
+          // gatherLights reads area_name from.
           const _attrs = hass.states[e.entity_id]?.attributes;
           const isMapSensor = e.entity_id.startsWith("sensor.")
             && ((_attrs && _attrs.device_class === "temperature") || (_attrs && _attrs.device_class === "humidity")
                 || isAirQualityEntity(e.entity_id, _attrs));
-          if (!/^(light|fan|binary_sensor)\./.test(e.entity_id) && !isMapSensor) continue;
+          if (!/^(light|fan|binary_sensor|lock)\./.test(e.entity_id) && !isMapSensor) continue;
           const aid = e.area_id || devAreaId[e.device_id] || null;
           areaMap[e.entity_id] = aid ? (areaIdToName[aid] || null) : null;
           // The platform that CREATED the entity — "partition" for an
@@ -2559,7 +2641,13 @@ export function buildLightsTable(host, lights){
     ["state", "State", (l) => l.isTemp ? (Number.isFinite(l.temperature) ? l.temperature : -Infinity)
       : l.isHumidity ? (Number.isFinite(l.humidity) ? l.humidity : -Infinity)
       : l.isAir ? (Number.isFinite(airQualityBadness(l)) ? airQualityBadness(l) : -Infinity)   // numeric OR graded word, one scale
-      : l.isLock ? (l.state === "locked" ? 1 : 0) : (l.state === "on" ? 1 : 0)],
+      : l.isLock ? (l.state === "locked" ? 1 : 0)
+      // Latched beats live, same as the displayed word (found in the Phase
+      // 2a registry audit, 2026-09-19) — a dried-out sensor still inside
+      // its 2-day alarm window reads ALARM and must sort as active, not
+      // fall to the bottom with a genuinely dry one.
+      : l.isFlood ? (floodIsAlarming(l, host.floodLatches) ? 1 : 0)
+      : (l.state === "on" ? 1 : 0)],
   ];
   const th = (key, label, extraStyle) => {
     if (!key || !host.onTableSort) return el("th", { style: extraStyle || "" }, label);
@@ -2681,7 +2769,13 @@ export function buildLightsTable(host, lights){
                (l.healthy ? "" : "box-shadow:0 0 4px #f87171bb"),
       })),
       el("td", { class: "muted", style: "font-size:11px" }, l.brand || "—"),
-      el("td", {}, l.isTemp
+      el("td", {}, l.isMotion
+        // Found in the Phase 2a registry audit, 2026-09-19: this chain had
+        // no motion branch, so it read the generic ON/OFF fallback where
+        // the room/floor sheet's identical chain (openAggregateSheet) reads
+        // MOTION/clear for the exact same sensor.
+        ? el("span", { class: `lv-state ${on ? "on" : "off"}` }, on ? "MOTION" : "clear")
+        : l.isTemp
         ? el("span", { class: "lv-state off" }, Number.isFinite(l.temperature) ? `${l.temperature}°` : "—")
         : l.isHumidity
         ? el("span", { class: "lv-state off" }, Number.isFinite(l.humidity) ? `${l.humidity}%` : "—")

@@ -25,7 +25,7 @@ const { fabricFrame, markerScale, markerRadiusPx, cmFromHandlePx, MAX_FIXTURE_CM
 // verbatim by the Lights sidebar panel, so the two tools always show the
 // identical map; this tab layers the build tools on top of it.
 const { ensureLightsRegistry, gatherLights, buildLightsMapCard, buildLightsTable, lightIsTouched,
-        sunAmbient, lastBrightness, spreadInRoom, createUndoStack, setOptimistic, clearOptimistic, effectiveState,
+        sunAmbient, spreadInRoom, createUndoStack, toggleEntity,
         wireUseSurface, openControlCard, openRoomSheet, openFloorSheet, openActivityCalendar, setManyStates,
         isOutdoorFloorId, wireHoverHud, pressRing, HOLD_MS, PRESS_RING_MS } =
   await import(`./lights_map.js${new URL(import.meta.url).search}`);
@@ -8616,40 +8616,13 @@ function _lightsTab(ctx, maps, active) {
     ? !!ctx.state.settings?.lights_show_beacons
     : !!mapState._lightsShowBeacons;
 
-  const toggle = async (eid) => {
-    if (!ctx.hass) return;
-    // Service domain is the entity's own (light / fan); a binary_sensor —
-    // motion or door/window — is read-only, same rules as the sidebar. So
-    // is a temperature sensor.*.
-    const domain = String(eid).split(".")[0];
-    if (domain === "binary_sensor") { ctx.toast("Sensors are read-only"); return; }
-    if (domain === "sensor") { ctx.toast("Temperature and air quality sensors are read-only"); return; }
-    // The EFFECTIVE state, not the raw HA one (Garry, 2026-09-11: a second
-    // tap inside the same optimistic window re-decided from state that
-    // hadn't caught up yet, so it silently repeated the first command
-    // instead of reversing it — see lights_panel.js's own _toggle for the
-    // full story; this preview path shares the same bug and the same fix).
-    const on = effectiveState(eid, ctx.hass.states[eid]?.state).state === "on";
-    // Optimistic, like the sidebar: the marker flips now, HA reconciles.
-    setOptimistic(eid, on ? "off" : "on");
-    ctx.actions.renderRooms();
-    try {
-      // Off→on restores the last dimmed level (shared memory in
-      // lights_map.js) — same behaviour as the sidebar, same source, so the
-      // two views cannot disagree about what "on" brings back.
-      const data = { entity_id: eid };
-      if (!on && domain === "light") {
-        const bri = lastBrightness(eid);
-        if (bri !== null) data.brightness = bri;
-      }
-      await ctx.hass.callService(domain, on ? "turn_off" : "turn_on", data);
-      setTimeout(() => ctx.actions.renderRooms(), 600);
-    } catch(err) {
-      clearOptimistic(eid);
-      ctx.actions.renderRooms();
-      ctx.toast("Could not toggle " + eid, true);
-    }
-  };
+  // The shared toggle (lights_map.js) — locks included; this preview path
+  // used to be its own copy with no lock branch, so a lock's Turn On/Off
+  // button called `lock.turn_on`, not a real HA service, and always failed.
+  const toggle = (eid) => toggleEntity(ctx.hass, eid, {
+    render: () => ctx.actions.renderRooms(),
+    toast: (m, e) => ctx.toast(m, e),
+  });
   // The sidebar's exact api, for Preview-as-sidebar (shared use surface).
   const controlsFor = hasControlCard;
   const previewApi = {
@@ -9496,14 +9469,17 @@ function _lightsTab(ctx, maps, active) {
       },
     }, `⎘ Apply look to ${selSet.size - 1} selected`));
 
-    const on = l.state === "on";
+    // A lock's "on" is "locked" — its state is never the string "on" (found
+    // in the Phase 2a registry audit, 2026-09-19: this button always read a
+    // locked lock as "Off" and offered "Turn On").
+    const on = l.isLock ? l.state === "locked" : l.state === "on";
     // A read-only class (motion, door/window, temperature, humidity, air
     // quality, flood) has nothing to switch — the button only ever produced
     // the read-only toast.
     if (isControllable(l)) insp.appendChild(el("button", {
       class: `lv-onoff ${on ? "on" : "off"}`,
       onclick: () => toggle(l.entity_id),
-    }, on ? "Turn Off" : "Turn On"));
+    }, l.isLock ? (on ? "Unlock" : "Lock") : (on ? "Turn Off" : "Turn On")));
 
     // Fixture shape — derived from the entity by default; this is the override.
     // Stored per entity_id (not per pin) so it works for every light, whether
