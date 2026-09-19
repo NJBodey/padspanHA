@@ -17,7 +17,7 @@ const { buildIsoSVG, shapeSvg, fabricFrame, sampleSceneField, pointInPolygon, of
 const { assignLightCodes, resolveLightShape, LIGHT_SHAPES, LIGHT_TYPE_OVERRIDES,
         TEMP_BORDER, healthOf,
         AIR_QUALITY_CLASSES, AIR_BORDER, airQualityBadness, airQualityWord, isAirQualityEntity,
-        classBorder, isControllable, hasFixedGlyph } =
+        classBorder, isControllable, hasFixedGlyph, isAtlasEntity } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 const { tierAtLeast } =
   await import(`./editions.js${new URL(import.meta.url).search}`);
@@ -1504,12 +1504,10 @@ export function ensureLightsRegistry(store, hass, areas, onLoaded){
           // #8, but this SEPARATE copy never grew a lock clause, so a lock's
           // "Assign room…" visibly saved (HA's own registry had it) and the
           // lock never left "no room" — this areaMap is the only source
-          // gatherLights reads area_name from.
-          const _attrs = hass.states[e.entity_id]?.attributes;
-          const isMapSensor = e.entity_id.startsWith("sensor.")
-            && ((_attrs && _attrs.device_class === "temperature") || (_attrs && _attrs.device_class === "humidity")
-                || isAirQualityEntity(e.entity_id, _attrs));
-          if (!/^(light|fan|binary_sensor|lock)\./.test(e.entity_id) && !isMapSensor) continue;
+          // gatherLights reads area_name from. Now the SAME predicate
+          // gatherLights itself uses (isAtlasEntity, light_codes.js), not a
+          // second hand-typed copy that can drift from it again.
+          if (!isAtlasEntity(e.entity_id, hass.states[e.entity_id]?.attributes)) continue;
           const aid = e.area_id || devAreaId[e.device_id] || null;
           areaMap[e.entity_id] = aid ? (areaIdToName[aid] || null) : null;
           // The platform that CREATED the entity — "partition" for an
@@ -1580,59 +1578,19 @@ export function gatherLights(states, areaMap, shapeOverrides, tier, platformMap,
   // had cleared, keeping those two markers lit while every unpaired PIR
   // in the house had already gone quiet).
   // primaryFor: secondary eid -> primary eid, used only to exclude the
-  // occupancy half from getting its own row.
+  // occupancy half of a verified motion+occupancy pair from getting its own
+  // row — it is not a separate device on this map, it is folded into its
+  // motion partner (2026-09-04 finding: an unfolded occupancy half stayed
+  // "on", and lit, minutes after its own motion entity had cleared).
   const primaryFor = pairMap || {};
+  // isAtlasEntity (light_codes.js) is the one place "which entities does
+  // Atlas admit at all" is declared — replaces a hand-typed OR-chain, one
+  // clause per class, that used to live here AND, separately, in
+  // ensureLightsRegistry's own areaMap filter above; the two had already
+  // drifted once (lock admitted here since gap #8, never added to the
+  // other copy — found in the Phase 2a registry audit, 2026-09-19).
   const lights = Object.keys(states || {})
-    .filter(eid => eid.startsWith("light.") || eid.startsWith("fan.")
-      // Motion sensors join by DEVICE CLASS, not domain alone — every
-      // other binary_sensor still stays out unless a later clause below
-      // names its own device_class explicitly. "occupancy" rides along
-      // with "motion": both are PIR presence sensors in HA's own taxonomy
-      // (motion = momentary, occupancy = sustained — e.g. an outlet-
-      // integrated bathroom sensor reports occupancy) and read identically
-      // on this map — found live: the bathroom outlets' PIRs
-      // (binary_sensor.invisoutlet_occupancy*) were invisible to the map
-      // until this line admitted their class.
-      // A verified pair's OCCUPANCY half is excluded here — it is not a
-      // separate device on this map, it is folded into its motion partner.
-      || (eid.startsWith("binary_sensor.")
-          && ["motion", "occupancy"].includes(states[eid].attributes?.device_class)
-          && !primaryFor[eid])
-      // Door/window sensors (Garry, 2026-09-08 — door/window barrier
-      // project, step 1: "Also add that device type to the list of devices
-      // in mapping, lighting"). A separate clause from motion/occupancy on
-      // purpose: doors never fold into a motion pair (primaryFor is a
-      // motion+occupancy-only concept) and read on the map as their own
-      // class — a static "is this left open" glyph, not a pulse.
-      || (eid.startsWith("binary_sensor.")
-          && ["door", "window"].includes(states[eid].attributes?.device_class))
-      // Flood/leak sensors (Garry, 2026-09-18): HA's own device_class for a
-      // water-leak detector is "moisture" — same admission shape as
-      // door/window above, its own class rather than folded into anything.
-      || (eid.startsWith("binary_sensor.")
-          && states[eid].attributes?.device_class === "moisture")
-      // Temperature sensors ride the same ceiling map — "same as WLED or
-      // any other object... devices telling the temperature can also act
-      // like a motion sensor" (Garry). sensor.* is a domain nothing else
-      // here admits, so this can never collide with a light/fan/binary_sensor.
-      || (eid.startsWith("sensor.") && states[eid].attributes?.device_class === "temperature")
-      // Humidity (Garry, 2026-09-15: "set it up like temperature") — same
-      // reasoning, same admission, its own class rather than folded into
-      // temperature (device_class distinguishes them; a sensor is never
-      // both).
-      || (eid.startsWith("sensor.") && states[eid].attributes?.device_class === "humidity")
-      // Air quality (Garry, 2026-09-14): the FOURTH read-only sensor class —
-      // sensor.* by HA's air-quality device classes (AQI, PM, CO₂, CO, VOC,
-      // NO₂, O₃, SO₂). Its job on the map: a faded stream of bars rising
-      // through its room while the air is poor.
-      // (isAirQualityEntity: a numeric class, OR an enum sensor named
-      // "air quality" that reports a graded word — the bathroom outlets.)
-      || isAirQualityEntity(eid, states[eid].attributes)
-      // lock.* — gap #8, best-in-class roadmap: the first domain this
-      // pipeline generalized to beyond light/fan/binary_sensor/sensor.
-      // Whole domain, no device_class gate needed (every lock entity is
-      // relevant).
-      || eid.startsWith("lock."))
+    .filter(eid => isAtlasEntity(eid, states[eid].attributes) && !primaryFor[eid])
     .map(eid => ({
       entity_id:     eid,
       friendly_name: states[eid].attributes?.friendly_name || eid,

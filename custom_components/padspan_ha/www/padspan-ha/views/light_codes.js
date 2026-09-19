@@ -392,6 +392,32 @@ export function hasFixedGlyph(l) { return deviceClassOf(l).fixedGlyph; }
 // for a plain light, which has none of its own.
 export function classBorder(l, fallback = null) { return deviceClassOf(l).border || fallback; }
 
+// Whole domains admitted unconditionally — a real fan.*/light.* entity is
+// relevant regardless of its attributes; WLED/partition are subtypes of
+// light distinguished later (assignLightCodes), not separate admission
+// cases here.
+const _WHOLE_DOMAINS = ["light.", "fan."];
+// The read-only sensor + lock rows — admitted by their OWN classifier
+// (isMotionSensor, isFloodSensor, ...), run against a lightweight stub
+// built straight from the raw entity_id/attrs, the exact shape those
+// functions already expect (they only ever read .entity_id/.device_class/
+// .friendly_name). light/wled/partition/fan are excluded: they're admitted
+// by domain above, and their own classifiers need real light attributes
+// (effect_list, platform) a bare HA-state stub can never carry.
+const _TESTABLE_CLASSES = DEVICE_CLASSES.filter(c => c.test && !c.castsLight);
+// Is this entity one Atlas admits at all? The single predicate gatherLights'
+// own admission filter and ensureLightsRegistry's separate areaMap filter
+// (lights_map.js) both used to hand-repeat, one class at a time — the
+// pattern that cost a lock its room assignment (found in the Phase 2a
+// registry audit, 2026-09-19: gap #8 added lock.* to gatherLights, but the
+// SEPARATE areaMap copy never grew a matching clause). `attrs` is the raw
+// HA state's `.attributes` object (or undefined).
+export function isAtlasEntity(eid, attrs) {
+  if (_WHOLE_DOMAINS.some(d => eid.startsWith(d))) return true;
+  const stub = { entity_id: eid, device_class: attrs && attrs.device_class, friendly_name: attrs && attrs.friendly_name };
+  return _TESTABLE_CLASSES.some(c => c.test(stub));
+}
+
 // ── Fixture shape ────────────────────────────────────────────────────────────
 // The marker's OUTLINE answers "what kind of light is that" without reading
 // the code. Derived from the entity by default so all of them are typed on

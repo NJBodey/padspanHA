@@ -164,7 +164,25 @@ def test_the_filter_chips_cover_every_class_bucket(tmp_path):
 
 # ── The fitness function ────────────────────────────────────────────────────
 
-_FLAG = re.compile(r"\bis(?:Fan|Motion|Door|Temp|Air|Humidity|Lock|Flood|Wled|Partition)\b")
+def _flag_keys() -> list[str]:
+    """The registry's own flagKeys — not a hand-typed enumeration of them.
+
+    Found in the Phase 2a registry audit, 2026-09-19: a hand-typed list here
+    is exactly the smell this test exists to catch, in the one place it
+    would be most ironic to have one — a newly-added class's flag would
+    silently evade this guard until someone remembered to update the regex
+    by hand. Falls back to today's known set when node is unavailable
+    (pytestmark already skips every test in this module in that case; this
+    only has to not crash at import/collection time).
+    """
+    if _NODE is None:
+        return ["isFan", "isMotion", "isDoor", "isTemp", "isAir", "isHumidity", "isLock", "isFlood", "isWled", "isPartition"]
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        return _run(Path(td), "console.log(JSON.stringify(LC.DEVICE_CLASSES.map(c=>c.flagKey).filter(Boolean)));\n")
+
+
+_FLAG = re.compile(r"\bis(?:" + "|".join(k[2:] for k in _flag_keys()) + r")\b")
 
 
 def _code_lines(src: str):
@@ -190,3 +208,45 @@ def test_no_frontend_file_hand_writes_a_class_list():
     assert not offenders, (
         "hand-written device-class list(s) — add a column to DEVICE_CLASSES "
         "(light_codes.js) and ask it instead:\n  " + "\n  ".join(offenders))
+
+
+# ── isAtlasEntity: the single admission predicate ───────────────────────────
+
+_ADMISSION_CASES = [
+    ("light.plain", {}, True),
+    ("fan.ceiling", {}, True),
+    ("switch.wall", {}, False),
+    ("binary_sensor.pir", {"device_class": "motion"}, True),
+    ("binary_sensor.occ", {"device_class": "occupancy"}, True),
+    ("binary_sensor.door", {"device_class": "door"}, True),
+    ("binary_sensor.win", {"device_class": "window"}, True),
+    ("binary_sensor.leak", {"device_class": "moisture"}, True),
+    ("binary_sensor.battery", {"device_class": "battery"}, False),
+    ("binary_sensor.plain", {}, False),
+    ("sensor.temp", {"device_class": "temperature"}, True),
+    ("sensor.notype", {}, True),  # isTempSensor's historical null-device_class catch-all
+    ("sensor.rh", {"device_class": "humidity"}, True),
+    ("sensor.co2", {"device_class": "carbon_dioxide"}, True),
+    ("sensor.aq_word", {"device_class": "enum", "friendly_name": "Bath Outlet Air Quality"}, True),
+    ("sensor.other_enum", {"device_class": "enum", "friendly_name": "Power On Behavior"}, False),
+    ("sensor.battery", {"device_class": "battery"}, False),
+    ("lock.front", {}, True),
+]
+
+
+def test_is_atlas_entity_matches_every_classifier_and_no_others(tmp_path):
+    out = _run(tmp_path, (
+        f"const CASES={json.dumps(_ADMISSION_CASES)};\n"
+        "console.log(JSON.stringify(CASES.map(([eid,attrs])=>LC.isAtlasEntity(eid,attrs))));\n"
+    ))
+    got = {c[0]: v for c, v in zip(_ADMISSION_CASES, out)}
+    want = {c[0]: c[2] for c in _ADMISSION_CASES}
+    assert got == want, {k: (got[k], want[k]) for k in want if got[k] != want[k]}
+
+
+def test_is_atlas_entity_excludes_the_occupancy_half_only_via_the_caller_not_itself(tmp_path):
+    """isAtlasEntity alone admits every occupancy entity — the pairing
+    exclusion (primaryFor) is gatherLights' own concern, layered on top,
+    not something the admission predicate itself should know about."""
+    out = _run(tmp_path, "console.log(JSON.stringify(LC.isAtlasEntity('binary_sensor.occ_secondary', {device_class:'occupancy'})));\n")
+    assert out is True
