@@ -7523,7 +7523,12 @@ export function _wireLightsBuild(ctx, isoDiv, o) {
       // file: a hold that's already completed doesn't get cancelled by the
       // hand settling before lifting.
       if (longPressed) return;
-      if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > 8) cancelTimer();
+      // Touch-aware, like the marker/door-section holds (found in the
+      // Phase 2a press-and-hold audit, 2026-09-19: this was the one hold
+      // surface still on a flat 8px for every pointer type — a finger's
+      // natural tremor during a still 500ms hold routinely exceeds that,
+      // so a room-name hold could still silently fail to arm on touch).
+      if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > (ev.pointerType === "mouse" ? 8 : 10)) cancelTimer();
     });
     rg.addEventListener("pointerup", cancelTimer);
     rg.addEventListener("pointerleave", cancelTimer);
@@ -7559,24 +7564,39 @@ export function _wireLightsBuild(ctx, isoDiv, o) {
     };
     hb.addEventListener("pointerdown", (ev) => {
       if (ev.button !== 0 && ev.pointerType === "mouse") return;
-      ev.stopPropagation();
-      try { hb.setPointerCapture(ev.pointerId); capId = ev.pointerId; } catch (_) {}
+      // A second pointerdown while one is already in progress (two fingers
+      // on the same barrier, or a rapid re-press) must not overwrite this
+      // gesture's state out from under it — found in the Phase 2a press-
+      // and-hold audit, 2026-09-19: without this, the FIRST pointer's
+      // eventual pointerup called clear() on state that by then belonged
+      // to the SECOND, still-in-progress gesture, silently un-arming it
+      // and releasing its capture.
+      if (capId !== null) return;
+      ev.preventDefault(); ev.stopPropagation();
+      // Ownership is tracked independently of whether the real capture call
+      // below succeeds — it used to be set as a side effect INSIDE that same
+      // try, so a browser that refused capture (or a test harness that
+      // doesn't implement the API at all) left capId permanently null and
+      // silently defeated every ev.pointerId===capId guard above.
+      capId = ev.pointerId;
+      try { hb.setPointerCapture(ev.pointerId); } catch (_) {}
       downX = ev.clientX; downY = ev.clientY; armed = false;
       const cx = parseFloat(hb.getAttribute("data-cx")), cy = parseFloat(hb.getAttribute("data-cy"));
       ringT = setTimeout(() => { ring = pressRing(svg, cx, cy, 12); }, PRESS_RING_MS);
       lpTimer = setTimeout(() => { armed = true; if (ring) ring.classList.add("armed"); }, HOLD_MS);
     });
     hb.addEventListener("pointermove", (ev) => {
-      if (armed) return;
+      if (ev.pointerId !== capId || armed) return;
       if (Math.hypot(ev.clientX - downX, ev.clientY - downY) > (ev.pointerType === "mouse" ? 4 : 10)) clear();
     });
-    hb.addEventListener("pointerup", () => {
+    hb.addEventListener("pointerup", (ev) => {
+      if (ev.pointerId !== capId) return;
       const wasArmed = armed; armed = false; clear();
       if (!wasArmed) return;
       o.mapState._focusRow = heid;
       ctx.actions.renderRooms();
     });
-    hb.addEventListener("pointercancel", () => { armed = false; clear(); });
+    hb.addEventListener("pointercancel", (ev) => { if (ev.pointerId !== capId) return; armed = false; clear(); });
     hb.addEventListener("click", (ev) => ev.stopPropagation());
   }
 
@@ -9078,7 +9098,12 @@ function _lightsTab(ctx, maps, active) {
     // Preview-as-sidebar asks the renderer for the use-surface ergonomics
     // (the sidebar's exact options) and wires the sidebar's exact gestures.
     codeChip: preview, hitHalo: preview, collapseUnplaced: preview,
-    barrierHit: !preview,
+    // paid && !preview, matching every sibling builder-only flag here — a
+    // free-tier install has no build tools wired (_wireLightsBuild never
+    // runs for it), so `!preview` alone drew an inert invisible hit-stroke
+    // over every linked barrier with nothing ever listening to it. Found
+    // in the Phase 2a press-and-hold audit, 2026-09-19.
+    barrierHit: paid && !preview,
     // Build-tool interaction: hexes select and drag instead of toggling.
     // Free tier: a hex switches the light, exactly as the sidebar does.
     // Preview: the shared use surface — tap switches, chip/hold opens the

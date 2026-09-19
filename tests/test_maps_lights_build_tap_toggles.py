@@ -266,3 +266,21 @@ out.focusRow = o.mapState._focusRow || null;
 """)
     assert out["focusRow"] is None, out
     assert out["toggleCalls"] == [] and out["renderCalls"] == [], out
+
+
+def test_a_second_touch_on_the_same_door_section_does_not_hijack_the_first():
+    """A second pointerdown on the same lbarhit before the first pointer's
+    up/cancel (two fingers, or a rapid re-press) must not overwrite the
+    first gesture's timers/capture — found in the Phase 2a press-and-hold
+    audit, 2026-09-19."""
+    out = _run(_BARHIT + """
+hb.dispatchEvent({ type: 'pointerdown', button: 0, pointerType: 'touch', pointerId: 2,
+  clientX: 50, clientY: 50, preventDefault(){}, stopPropagation(){} });
+hb.dispatchEvent({ type: 'pointerdown', button: 0, pointerType: 'touch', pointerId: 3,
+  clientX: 80, clientY: 80, preventDefault(){}, stopPropagation(){} });
+await flush();
+hb.dispatchEvent({ type: 'pointerup', pointerId: 2, clientX: 51, clientY: 50 });
+out.focusRow = o.mapState._focusRow || null;
+""")
+    assert out["focusRow"] == "binary_sensor.frontdoor", (
+        "the first pointer's hold must still complete — a second pointerdown must be ignored, not take over", out)
