@@ -30,7 +30,7 @@ const { ensureLightsRegistry, gatherLights, buildLightsMapCard, buildLightsTable
         isOutdoorFloorId, wireHoverHud, pressRing, HOLD_MS, PRESS_RING_MS } =
   await import(`./lights_map.js${new URL(import.meta.url).search}`);
 // Fixture-shape vocabulary + derivation (the tab owns the manual override UI).
-const { LIGHT_SHAPES, deriveLightShape } =
+const { LIGHT_SHAPES, deriveLightShape, isControllable } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 // "Is this map-setup step done?" — shared with the Overview onboarding
 // checklist (panel.js) so the two can never disagree about what's finished.
@@ -9434,7 +9434,7 @@ function _lightsTab(ctx, maps, active) {
     // A read-only class (motion, door/window, temperature, humidity, air
     // quality, flood) has nothing to switch — the button only ever produced
     // the read-only toast.
-    if (!(l.isMotion || l.isDoor || l.isTemp || l.isHumidity || l.isAir || l.isFlood)) insp.appendChild(el("button", {
+    if (isControllable(l)) insp.appendChild(el("button", {
       class: `lv-onoff ${on ? "on" : "off"}`,
       onclick: () => toggle(l.entity_id),
     }, on ? "Turn Off" : "Turn On"));

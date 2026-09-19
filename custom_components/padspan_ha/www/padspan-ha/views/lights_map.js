@@ -15,8 +15,9 @@ const { buildIsoSVG, shapeSvg, fabricFrame, sampleSceneField, pointInPolygon, of
         lightClassOf, SHOWCASE_THEMES, AUTOMORPH_STYLE_LABELS, floodLatchActive } =
   await import(`./iso_lights.js${new URL(import.meta.url).search}`);
 const { assignLightCodes, resolveLightShape, LIGHT_SHAPES, LIGHT_TYPE_OVERRIDES,
-        WLED_BORDER, PARTITION_BORDER, FAN_BORDER, MOTION_BORDER, TEMP_BORDER, LOCK_BORDER, DOOR_BORDER, healthOf,
-        AIR_QUALITY_CLASSES, AIR_BORDER, HUMIDITY_BORDER, FLOOD_BORDER, airQualityBadness, airQualityWord, isAirQualityEntity } =
+        TEMP_BORDER, healthOf,
+        AIR_QUALITY_CLASSES, AIR_BORDER, airQualityBadness, airQualityWord, isAirQualityEntity,
+        classBorder, isControllable, hasFixedGlyph } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 const { tierAtLeast } =
   await import(`./editions.js${new URL(import.meta.url).search}`);
@@ -759,7 +760,7 @@ export function openAggregateSheet(api, { title, sub, items, actions }){
   for (const l of items) {
     const on = l.state === "on";
     const row = mk("div", _S.row);
-    const col = l.isWled ? WLED_BORDER : (l.isPartition ? PARTITION_BORDER : (l.isFan ? FAN_BORDER : (l.isMotion ? MOTION_BORDER : (l.isTemp ? TEMP_BORDER : (l.isHumidity ? HUMIDITY_BORDER : (l.isAir ? AIR_BORDER : (l.isDoor ? DOOR_BORDER : (l.isFlood ? FLOOD_BORDER : "#52b788"))))))));
+    const col = classBorder(l, "#52b788");
     row.appendChild(mk("span", _S.code + `;color:${col}`, l.code));
     row.appendChild(mk("span", _S.name, l.friendly_name));
     if (l.isMotion) {
@@ -1701,7 +1702,7 @@ export function lightIsTouched(l, shapeOverrides, placements, linkedDoorEids) {
   // anyone placed one. Flood joins the same list for the same reason
   // (2026-09-18) — its whole "reading" is the ring it draws while wet, no
   // shape/size/colour of its own either.
-  if (l.isMotion || l.isTemp || l.isHumidity || l.isAir || l.isLock || l.isFlood) return true;
+  if (hasFixedGlyph(l)) return true;
   if (Number(p.width_cm) > 0 || Number(p.height_cm) > 0) return true;
   if (Number(p.rotation)) return true;
   if (p.color && String(p.color).toLowerCase() !== _DROP_COLOR) return true;
@@ -2633,16 +2634,7 @@ export function buildLightsTable(host, lights){
         title: host.onSelectForPlacement && !l.isDoor ? "Select for map placement" : undefined,
         onclick: host.onSelectForPlacement && !l.isDoor ? (e) => { e.stopPropagation(); host.onSelectForPlacement(l); } : undefined,
       }, (() => {
-        const swatch = l.isWled ? WLED_BORDER
-          : (l.isPartition ? PARTITION_BORDER
-          : (l.isFan ? FAN_BORDER
-          : (l.isMotion ? MOTION_BORDER
-          : (l.isTemp ? TEMP_BORDER
-          : (l.isHumidity ? HUMIDITY_BORDER
-          : (l.isAir ? AIR_BORDER
-          : (l.isLock ? LOCK_BORDER
-          : (l.isDoor ? DOOR_BORDER
-          : (l.isFlood ? FLOOD_BORDER : "#52b788")))))))));
+        const swatch = classBorder(l, "#52b788");
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("width", "15"); svg.setAttribute("height", "15");
         svg.setAttribute("viewBox", "0 0 15 15");
@@ -2756,7 +2748,7 @@ export function buildLightsTable(host, lights){
       el("td", { style: "text-align:center;white-space:nowrap" }, [
         // The visible way to the controls (sidebar): a "⋯" that opens the
         // card — the same card the hold opens, offered in plain sight.
-        ...(host.onRowMore && !l.isMotion && !l.isTemp && !l.isHumidity && !l.isAir && !l.isFlood ? [el("button", {
+        ...(host.onRowMore && isControllable(l) ? [el("button", {
           class: "lv-act", title: "Controls", style: "margin-right:6px",
           onclick: (e) => { e.stopPropagation(); host.onRowMore(l); },
         }, "⋯")] : []),

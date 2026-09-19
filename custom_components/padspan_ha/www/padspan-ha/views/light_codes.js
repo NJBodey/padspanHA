@@ -219,51 +219,6 @@ export function isLock(l) {
   return String(l.entity_id || "").startsWith("lock.");
 }
 
-// ── Device-class registry (Phase 2a, docs/PHASE2_STRATEGIC_REVIEW.md §5) ───
-// One row per non-light sensor/actuator class, declaring the capabilities
-// that used to be their own hand-maintained exclusion list, copied wherever
-// it was needed — the flood-sensor feature alone (adding ONE class) cost
-// ~25 edit sites across 4 files, because there was no single place "which
-// classes are read-only, which cast light, which need this exclusion" was
-// declared once. `castsLight` below is the first capability migrated onto
-// this table; light_codes.js is the right home for it (light_codes.js has
-// no imports from any of its consumers, so none of them can end up
-// importing it back — iso_lights.js, lights_map.js and maps.js already
-// import border colours from here, this is the same relationship).
-//
-// flagKey: the l.isX property assignLightCodes sets — null for "light" and
-// "strip" (wled/partition), which have no single boolean of their own.
-export const DEVICE_CLASSES = [
-  { key: "light",     flagKey: null,          castsLight: true  },
-  { key: "wled",      flagKey: "isWled",      castsLight: true  },
-  { key: "partition", flagKey: "isPartition", castsLight: true  },
-  { key: "fan",       flagKey: "isFan",       castsLight: false },
-  { key: "motion",    flagKey: "isMotion",    castsLight: false },
-  { key: "door",      flagKey: "isDoor",      castsLight: false },
-  { key: "flood",     flagKey: "isFlood",     castsLight: false },
-  { key: "air",       flagKey: "isAir",       castsLight: false },
-  { key: "temp",      flagKey: "isTemp",      castsLight: false },
-  { key: "humidity",  flagKey: "isHumidity",  castsLight: false },
-  { key: "lock",      flagKey: "isLock",      castsLight: false },
-];
-// Classes whose flagKey is false for `l` — i.e. classes with no light/aura
-// treatment. Built once from the table above, not hand-retyped per caller.
-const _NO_LIGHT_FLAG_KEYS = DEVICE_CLASSES.filter(c => !c.castsLight && c.flagKey).map(c => c.flagKey);
-// Does this fixture cast a light aura/pool/glow at all? False for every
-// sensor/actuator class (motion, door, flood, air, temp, humidity, lock,
-// fan) — true for an actual light (plain, WLED, or partition). Replaces 7
-// independent copies of the same exclusion chain in iso_lights.js (grepped
-// directly, §I of the strategic review) plus more in lights_map.js and
-// maps.js — some of those 7 had drifted to omit `isLock` (locks report
-// state "locked"/"unlocked"/"jammed", never "on", so 2 of the 7 were
-// already harmless in practice via their own separate `state==="on"` gate;
-// the other 2 were not state-gated and really would have auraed a lock —
-// corrected here, verified against the full render-determinism suite).
-export function castsLight(l) {
-  if (!l) return true;
-  return !_NO_LIGHT_FLAG_KEYS.some(k => l[k]);
-}
-
 // Health — a device can be reachable and still not actually be DOING its
 // job. What "healthy" means differs by class, so this isn't one check:
 //
@@ -297,54 +252,48 @@ export function healthOf(l, nowMs) {
     return { healthy: false, reason: `Entity is ${l.state}` };
   }
   const now = Number(nowMs) || Date.now();
-  if (l.isMotion) {
+  const OK = { healthy: true, reason: "" };
+  // Which second signal applies is the class's own row (DEVICE_CLASSES.health)
+  // — null means reachability is the whole question.
+  const kind = deviceClassOf(l).health;
+  // Motion stuck "on", or a door/window left open: the SAME stuck-state
+  // shape and the SAME threshold (Garry, 2026-09-09: "I want the lighting
+  // map to clearly show when a door or window is left open") — "left open"
+  // and "stuck on" are the same real-world event, only the wording differs.
+  if (kind === "stuck_on" || kind === "left_open") {
     const changed = l.last_changed ? Date.parse(l.last_changed) : NaN;
     if (l.state === "on" && Number.isFinite(changed) && (now - changed) > MOTION_STUCK_MS) {
       const hrs = Math.round((now - changed) / 3600000);
-      return { healthy: false, reason: `Stuck "on" for ~${hrs}h — likely a hardware fault, not continuous motion` };
+      return { healthy: false, reason: kind === "left_open"
+        ? `Open for ~${hrs}h`
+        : `Stuck "on" for ~${hrs}h — likely a hardware fault, not continuous motion` };
     }
-    return { healthy: true, reason: "" };
+    return OK;
   }
   // A temperature, air-quality or humidity sensor is healthy while it keeps reporting.
-  if (l.isTemp || l.isAir || l.isHumidity) {
+  if (kind === "fresh") {
     const updated = l.last_changed ? Date.parse(l.last_changed) : NaN;
     if (!Number.isFinite(updated)) return { healthy: false, reason: "No reading timestamp" };
     if ((now - updated) > TEMP_FRESH_MS) {
       const hrs = Math.round((now - updated) / 3600000);
       return { healthy: false, reason: `No reading in over ${hrs}h` };
     }
-    return { healthy: true, reason: "" };
+    return OK;
   }
-  // A door/window is the same shape of stuck-state problem as motion
-  // (Garry, 2026-09-09: "I want the lighting map to clearly show when a
-  // door or window is left open") — reuses the SAME threshold, not a new
-  // number, since "left open" and "stuck on" are the same real-world event.
-  if (l.isDoor) {
-    const changed = l.last_changed ? Date.parse(l.last_changed) : NaN;
-    if (l.state === "on" && Number.isFinite(changed) && (now - changed) > MOTION_STUCK_MS) {
-      const hrs = Math.round((now - changed) / 3600000);
-      return { healthy: false, reason: `Open for ~${hrs}h` };
-    }
-    return { healthy: true, reason: "" };
-  }
-  // Flood deliberately gets NO stuck-state check here, unlike motion/door
-  // above: "on" held for hours might be exactly correct — an actual ongoing
-  // leak, which should keep alarming until someone fixes it, not get
-  // silently marked "probably a hardware fault" and dismissed. It falls
-  // through to reachability-only, same as a fan or plain light.
-  if (isWledLight(l)) {
+  // Flood deliberately has NO stuck-state kind (health: null in its row),
+  // unlike motion/door: "on" held for hours might be exactly correct — an
+  // actual ongoing leak, which should keep alarming until someone fixes it,
+  // not get silently marked "probably a hardware fault" and dismissed.
+  if (kind === "effects") {
     if (!Array.isArray(l.effect_list) || !l.effect_list.length) {
       return { healthy: false, reason: "No effects reported — this WLED strip may have lost its effect list" };
     }
-    return { healthy: true, reason: "" };
+    return OK;
   }
-  if (l.isLock) {
-    if (l.state === "jammed") {
-      return { healthy: false, reason: "Lock is jammed" };
-    }
-    return { healthy: true, reason: "" };
+  if (kind === "jammed") {
+    return l.state === "jammed" ? { healthy: false, reason: "Lock is jammed" } : OK;
   }
-  return { healthy: true, reason: "" };
+  return OK;
 }
 
 // The type-override chooser's vocabulary — the UI's copy of const.py's
@@ -376,6 +325,63 @@ export const HUMIDITY_BORDER = "#818cf8";
 // or MOTION_BORDER's blue: a flood alarm should read as urgent at a glance,
 // not blend in as just another sensor colour.
 export const FLOOD_BORDER = "#ef4444";
+
+// ── Device-class registry (Phase 2a, docs/PHASE2_STRATEGIC_REVIEW.md §5) ───
+// ONE row per class, in PRECEDENCE order (first match wins — a light.*
+// overridden to "fan" is a fan even if it also reports effects; a partition
+// segment that also carries effects is WLED, the more capable identity).
+// Every "which classes does X apply to" question reads this table instead of
+// hand-listing the classes again — adding the flood class cost ~25 edit sites
+// across 4 files because no such table existed, and two of the hand copies
+// had already drifted (locks aura'd by Automorph; a lock's code painted
+// default green in the room sheet; a pointless Controls button on door rows).
+//
+//   key          the class name
+//   flagKey      the l.isX boolean assignLightCodes sets (null for a plain light)
+//   test         the classifier — raw entity → is it this class
+//   code         the code-series letter (F01, M01…); null = the generic A01… run
+//   border       marker border / code-chip / swatch colour; null = the default
+//   shape        the fixed glyph a domain-typed class always derives to
+//   filterClass  the layer-chip / aggregate bucket (wled+partition = "strip")
+//   castsLight   draws a light aura / pool / glow / wall spill
+//   controllable has a real action (toggle, lock/unlock) — false = read-only
+//   fixedGlyph   one fixed glyph, no size/rotation/colour of its own to edit —
+//                a bare placement is the whole placement (see lightIsTouched).
+//                A door is NOT this: it is never a point marker at all, it is
+//                a linked section of wall.
+//   health       which healthOf() strategy applies beyond plain reachability
+export const DEVICE_CLASSES = [
+  { key: "fan",       flagKey: "isFan",       test: isFan,              code: "F", border: FAN_BORDER,       shape: "fan",             filterClass: "fan",      castsLight: false, controllable: true,  fixedGlyph: false, health: null },
+  { key: "motion",    flagKey: "isMotion",    test: isMotionSensor,     code: "M", border: MOTION_BORDER,    shape: "motion",          filterClass: "motion",   castsLight: false, controllable: false, fixedGlyph: true,  health: "stuck_on" },
+  { key: "door",      flagKey: "isDoor",      test: isDoorSensor,       code: "D", border: DOOR_BORDER,      shape: "door",            filterClass: "door",     castsLight: false, controllable: false, fixedGlyph: false, health: "left_open" },
+  { key: "flood",     flagKey: "isFlood",     test: isFloodSensor,      code: "K", border: FLOOD_BORDER,     shape: "flood",           filterClass: "flood",    castsLight: false, controllable: false, fixedGlyph: true,  health: null },
+  { key: "air",       flagKey: "isAir",       test: isAirQualitySensor, code: "Q", border: AIR_BORDER,       shape: "airquality",      filterClass: "air",      castsLight: false, controllable: false, fixedGlyph: true,  health: "fresh" },
+  { key: "humidity",  flagKey: "isHumidity",  test: isHumiditySensor,   code: "H", border: HUMIDITY_BORDER,  shape: "humidityreadout", filterClass: "humidity", castsLight: false, controllable: false, fixedGlyph: true,  health: "fresh" },
+  { key: "temp",      flagKey: "isTemp",      test: isTempSensor,       code: "T", border: TEMP_BORDER,      shape: "tempreadout",     filterClass: "temp",     castsLight: false, controllable: false, fixedGlyph: true,  health: "fresh" },
+  { key: "lock",      flagKey: "isLock",      test: isLock,             code: "L", border: LOCK_BORDER,      shape: "lock",            filterClass: "lock",     castsLight: false, controllable: true,  fixedGlyph: true,  health: "jammed" },
+  { key: "wled",      flagKey: "isWled",      test: isWledLight,        code: "W", border: WLED_BORDER,      shape: null,              filterClass: "strip",    castsLight: true,  controllable: true,  fixedGlyph: false, health: "effects" },
+  { key: "partition", flagKey: "isPartition", test: isPartitionLight,   code: "P", border: PARTITION_BORDER, shape: null,              filterClass: "strip",    castsLight: true,  controllable: true,  fixedGlyph: false, health: null },
+  { key: "light",     flagKey: null,          test: null,               code: null, border: null,            shape: null,              filterClass: "light",    castsLight: true,  controllable: true,  fixedGlyph: false, health: null },
+];
+const _PLAIN_LIGHT = DEVICE_CLASSES[DEVICE_CLASSES.length - 1];
+
+// The row for an entity whose l.isX flags are set (assignLightCodes, or a
+// hand-built record carrying just the one flag that matters). Flags are
+// winner-takes-all, so at most one is ever true.
+export function deviceClassOf(l) {
+  if (l) for (const c of DEVICE_CLASSES) if (c.flagKey && l[c.flagKey]) return c;
+  return _PLAIN_LIGHT;
+}
+// Does this fixture cast a light aura/pool/glow at all? (iso_lights.js — 7 sites.)
+export function castsLight(l) { return deviceClassOf(l).castsLight; }
+// Does it have a real action to offer — a toggle, a lock/unlock? False for
+// the read-only sensor classes: no Turn On/Off, no Controls button.
+export function isControllable(l) { return deviceClassOf(l).controllable; }
+// One fixed glyph with nothing to size, turn or tint (see the table's note).
+export function hasFixedGlyph(l) { return deviceClassOf(l).fixedGlyph; }
+// The class colour — marker border, code chip, index swatch — or `fallback`
+// for a plain light, which has none of its own.
+export function classBorder(l, fallback = null) { return deviceClassOf(l).border || fallback; }
 
 // ── Fixture shape ────────────────────────────────────────────────────────────
 // The marker's OUTLINE answers "what kind of light is that" without reading
@@ -434,19 +440,12 @@ export function deriveLightShape(l) {
 
   // Real fan.* and motion binary_sensor.* entities are typed by DOMAIN —
   // no name needed.
-  if (isFan(l)) return "fan";
-  if (isMotionSensor(l)) return "motion";
-  if (isDoorSensor(l)) return "door";
-  // Checked here, ahead of the has("flood") floodlight-name heuristic
-  // below — a real binary_sensor.* leak detector is classified by domain
-  // and never reaches that name match at all. The two "flood"s are
-  // otherwise unrelated: one is a spotlight naming convention, this is a
-  // water sensor.
-  if (isFloodSensor(l)) return "flood";
-  if (isAirQualitySensor(l)) return "airquality";
-  if (isHumiditySensor(l)) return "humidityreadout";
-  if (isTempSensor(l)) return "tempreadout";
-  if (isLock(l)) return "lock";
+  // The table's fixed-glyph rows, in its precedence order. This runs ahead
+  // of every name heuristic below on purpose — a real binary_sensor.* leak
+  // detector must never reach the has("flood") FLOODLIGHT-name match: the
+  // two "flood"s are unrelated (one is a spotlight naming convention, the
+  // other a water sensor).
+  for (const c of DEVICE_CLASSES) if (c.shape && c.test(l)) return c.shape;
   // A fan exposed as a light entity is not a light at all — worth seeing.
   if (has("fan")) return "fan";
   if (has("chandelier")) return "chandelier";
@@ -481,63 +480,29 @@ export function resolveLightShape(l, overrides) {
 // Letters reserved for a class series, skipped as the generic series counts
 // past them — precomputed once so another reserved letter is a one-line
 // change here, not new arithmetic.
-const _SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(c => c !== "D" && c !== "F" && c !== "H" && c !== "K" && c !== "L" && c !== "M" && c !== "P" && c !== "Q" && c !== "T" && c !== "W");
+const _CLASS_LETTERS = new Set(DEVICE_CLASSES.map(c => c.code).filter(Boolean));
+const _SERIES_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(c => !_CLASS_LETTERS.has(c));
 
-// Mutates each light in place: sets l.code, l.isWled, l.isPartition,
-// l.isFan, l.isMotion, l.isDoor, l.isTemp and l.isHumidity. Pass EVERY
-// entity (including hidden ones) so codes stay stable when visibility
-// changes. Domain classes first — a fan is a fan, a sensor is a sensor,
-// whatever they advertise; then WLED before partition: a partition segment
-// that ALSO carries effects reads as WLED-class — the more capable
-// identity wins.
+// Mutates each light in place: sets l.code and every class flag in
+// DEVICE_CLASSES (l.isFan, l.isMotion, … l.isWled, l.isPartition). Pass
+// EVERY entity (including hidden ones) so codes stay stable when visibility
+// changes. Precedence is the table's row order.
 export function assignLightCodes(lights) {
   const sorted = [...lights].sort((a, b) => a.entity_id.localeCompare(b.entity_id));
-  let f = 0, m = 0, w = 0, p = 0, t = 0, h = 0, lk = 0, d = 0, q = 0, k = 0, n = 0;
+  const counts = new Map();
+  let n = 0;
   const seriesCode = (idx) =>
     _SERIES_LETTERS[Math.floor(idx / 99)] + String((idx % 99) + 1).padStart(2, "0");
   for (const l of sorted) {
-    l.isFan = isFan(l);
-    l.isMotion = isMotionSensor(l);
-    l.isDoor = isDoorSensor(l);
-    l.isFlood = isFloodSensor(l);
-    l.isAir = isAirQualitySensor(l);
-    l.isHumidity = !l.isAir && isHumiditySensor(l);
-    l.isTemp = !l.isAir && !l.isHumidity && isTempSensor(l);
-    l.isLock = isLock(l);
-    if (l.isFan) {
-      l.isWled = false; l.isPartition = false;
-      l.code = "F" + String((f++ % 99) + 1).padStart(2, "0");
-    } else if (l.isMotion) {
-      l.isWled = false; l.isPartition = false;
-      l.code = "M" + String((m++ % 99) + 1).padStart(2, "0");
-    } else if (l.isDoor) {
-      l.isWled = false; l.isPartition = false;
-      l.code = "D" + String((d++ % 99) + 1).padStart(2, "0");
-    } else if (l.isFlood) {
-      l.isWled = false; l.isPartition = false;
-      // K: D/F/L/W (door, fan, lock, WLED) all already taken — arbitrary,
-      // same as Q for air quality.
-      l.code = "K" + String((k++ % 99) + 1).padStart(2, "0");
-    } else if (l.isAir) {
-      l.isWled = false; l.isPartition = false;
-      l.code = "Q" + String((q++ % 99) + 1).padStart(2, "0");
-    } else if (l.isTemp) {
-      l.isWled = false; l.isPartition = false;
-      l.code = "T" + String((t++ % 99) + 1).padStart(2, "0");
-    } else if (l.isHumidity) {
-      l.isWled = false; l.isPartition = false;
-      l.code = "H" + String((h++ % 99) + 1).padStart(2, "0");
-    } else if (l.isLock) {
-      l.isWled = false; l.isPartition = false;
-      l.code = "L" + String((lk++ % 99) + 1).padStart(2, "0");
-    } else if (isWledLight(l)) {
-      l.isWled = true; l.isPartition = false;
-      l.code = "W" + String((w++ % 99) + 1).padStart(2, "0");
-    } else if (isPartitionLight(l)) {
-      l.isWled = false; l.isPartition = true;
-      l.code = "P" + String((p++ % 99) + 1).padStart(2, "0");
+    // First row whose classifier claims the entity wins; every other flag
+    // is false, so no consumer ever has to ask "fan AND wled?".
+    const cls = DEVICE_CLASSES.find(c => c.test && c.test(l)) || _PLAIN_LIGHT;
+    for (const c of DEVICE_CLASSES) if (c.flagKey) l[c.flagKey] = (c === cls);
+    if (cls.code) {
+      const i = counts.get(cls.code) || 0;
+      counts.set(cls.code, i + 1);
+      l.code = cls.code + String((i % 99) + 1).padStart(2, "0");
     } else {
-      l.isWled = false; l.isPartition = false;
       l.code = seriesCode(n++);
     }
   }

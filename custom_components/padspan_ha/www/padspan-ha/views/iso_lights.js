@@ -18,8 +18,8 @@
 // refused to place a light. Everything the view needs is in the fabric, in
 // metres, and now that is the only thing it reads.
 
-const { WLED_BORDER, PARTITION_BORDER, FAN_BORDER, MOTION_BORDER, MOTION_PULSE, TEMP_BORDER, LOCK_BORDER, DOOR_BORDER,
-        AIR_BORDER, HUMIDITY_BORDER, FLOOD_BORDER, airQualityBadness, castsLight } =
+const { WLED_BORDER, PARTITION_BORDER, MOTION_PULSE, DOOR_BORDER,
+        HUMIDITY_BORDER, FLOOD_BORDER, airQualityBadness, castsLight, classBorder, deviceClassOf } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 
 function escSVG(s){ return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
@@ -1967,17 +1967,7 @@ export function pointInPolygon(pts, x, y){
 // four domains: a strip (WLED or partition) is a light with more to offer,
 // and the layer chips, the halo and the tap semantics all key off this.
 export function lightClassOf(l){
-  if(!l) return "light";
-  if(l.isFan) return "fan";
-  if(l.isMotion) return "motion";
-  if(l.isDoor) return "door";
-  if(l.isFlood) return "flood";
-  if(l.isAir) return "air";
-  if(l.isTemp) return "temp";
-  if(l.isHumidity) return "humidity";
-  if(l.isLock) return "lock";
-  if(l.isWled||l.isPartition) return "strip";
-  return "light";
+  return deviceClassOf(l).filterClass;
 }
 
 // Cluster offsets (SVG px) for N hexes touching around a centre
@@ -3570,16 +3560,7 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
       // Showcase: a dark fixture is slate and recedes; the eye should go to
       // what is actually lit. Working mode keeps the flat pair it always had.
       const fill=on?lit:(SHOW?THEME.fixtureOffFill:"#374151");
-      const stripBorder=l.isWled?WLED_BORDER
-        :(l.isPartition?PARTITION_BORDER
-        :(l.isFan?FAN_BORDER
-        :(l.isMotion?MOTION_BORDER
-        :(l.isDoor?DOOR_BORDER
-        :(l.isTemp?TEMP_BORDER
-        :(l.isAir?AIR_BORDER
-        :(l.isHumidity?HUMIDITY_BORDER
-        :(l.isLock?LOCK_BORDER
-        :(l.isFlood?FLOOD_BORDER:null)))))))));
+      const stripBorder=classBorder(l);
       const stroke=SHOW
         ? (on?(stripBorder||THEME.fixtureOnStrokeFallback):THEME.fixtureOffStroke)
         : (stripBorder||"#60a5fa");

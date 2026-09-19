@@ -3033,8 +3033,11 @@ def test_moving_a_light_does_not_count_as_touching_it(tmp_path):
     src = (_VIEWS / "lights_map.js").read_text(encoding="utf-8")
     body = src[src.index("const _DROP_COLOR"):]
     body = body[:body.index("// Legend for the shape vocabulary")]
+    # lightIsTouched asks the device-class registry (light_codes.js) which
+    # classes are fixed-glyph — the real module, not a stub of it.
     out = _run_js(tmp_path, (
-        body + "\n"
+        "import { hasFixedGlyph } from './light_codes.mjs';\n"
+        + body + "\n"
         "const T=(over,pl)=>lightIsTouched({entity_id:'light.x'},over,pl);\n"
         "const TD=(over,pl)=>lightIsTouched({entity_id:'light.x',isDoor:true},over,pl);\n"
         "const TDL=(over,pl,linked)=>lightIsTouched({entity_id:'light.x',isDoor:true},over,pl,linked);\n"
@@ -3108,11 +3111,13 @@ def test_a_placed_motion_temp_humidity_air_or_lock_sensor_is_touched_by_a_bare_p
     body = body[:body.index("// Legend for the shape vocabulary")]
     bare = "{x_m:1,y_m:2,floor_id:'main',color:'#fbbf24',width_cm:0,height_cm:0,rotation:0}"
     out = _run_js(tmp_path, (
-        body + "\n"
+        "import { hasFixedGlyph } from './light_codes.mjs';\n"
+        + body + "\n"
         "const T=(cls)=>lightIsTouched({entity_id:'x',[cls]:true},{},{'x':" + bare + "});\n"
         "const unplacedT=(cls)=>lightIsTouched({entity_id:'x',[cls]:true},{},{});\n"
         "console.log(JSON.stringify({\n"
         "  motion: T('isMotion'), temp: T('isTemp'), humidity: T('isHumidity'), air: T('isAir'), lock: T('isLock'),\n"
+        "  flood: T('isFlood'), fanStillUntouched: T('isFan'),\n"
         "  plainLightStillUntouched: lightIsTouched({entity_id:'x'},{},{'x':" + bare + "}),\n"
         "  unplacedMotionStillUntouched: unplacedT('isMotion'),\n"
         "}));\n"
@@ -3122,6 +3127,8 @@ def test_a_placed_motion_temp_humidity_air_or_lock_sensor_is_touched_by_a_bare_p
     assert out["humidity"] is True, out
     assert out["air"] is True, out
     assert out["lock"] is True, out
+    assert out["flood"] is True, out
+    assert out["fanStillUntouched"] is False, "a fan has a real size/rotation to edit — not a fixed glyph"
     assert out["plainLightStillUntouched"] is False, (
         "the carve-out is for the four read-only sensor classes only — "
         "an ordinary light fixture with the same bare drop stays untouched"
