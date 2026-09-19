@@ -30,7 +30,7 @@ const { ensureLightsRegistry, gatherLights, buildLightsMapCard, buildLightsTable
         isOutdoorFloorId, wireHoverHud, pressRing, HOLD_MS, PRESS_RING_MS } =
   await import(`./lights_map.js${new URL(import.meta.url).search}`);
 // Fixture-shape vocabulary + derivation (the tab owns the manual override UI).
-const { LIGHT_SHAPES, deriveLightShape, isControllable, deviceClassOf, hasControlCard } =
+const { LIGHT_SHAPES, deriveLightShape, isControllable, deviceClassOf, hasControlCard, hasFixedGlyph } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 // "Is this map-setup step done?" — shared with the Overview onboarding
 // checklist (panel.js) so the two can never disagree about what's finished.
@@ -9508,8 +9508,13 @@ function _lightsTab(ctx, maps, active) {
 
     // Fixture shape — derived from the entity by default; this is the override.
     // Stored per entity_id (not per pin) so it works for every light, whether
-    // it has been placed or is still auto-clustered in its room.
-    {
+    // it has been placed or is still auto-clustered in its room. Hidden for
+    // a fixed-glyph class (motion/flood/temp/humidity/air/lock — DEVICE_
+    // CLASSES.fixedGlyph): those have "no size/rotation/colour of its own to
+    // edit" by design, and the control offered one anyway with no effect —
+    // ws_settings.py silently dropped the save for any non-light.* key until
+    // fixed the same day (Phase 2a registry audit, 2026-09-19).
+    if (!hasFixedGlyph(l)) {
       const current = shapeOverrides[l.entity_id] || "auto";
       const derived = LIGHT_SHAPES.find(([k]) => k === deriveLightShape(l));
       const shapeLbl = el("label", { class: "lv-field" }, "Shape");

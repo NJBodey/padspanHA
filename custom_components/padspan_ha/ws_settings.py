@@ -75,6 +75,33 @@ def _normalize_automorph_style(value: Any) -> str:
     return v if v in _AUTOMORPH_STYLES else "glow"
 
 
+def _sanitize_light_shapes(raw: Any) -> dict[str, str]:
+    """entity_id -> shape kind. Only known kinds are stored; an unknown
+    value would just fall back to the default marker in the frontend, but
+    there is no reason to persist junk. "auto" is expressed by omitting the
+    entity, so it is never stored.
+
+    CORRECTED 2026-09-19 (Phase 2a registry audit): this used to keep only
+    "light."-prefixed keys, unlike light_type_overrides (which is correctly
+    light.*-only — a type override only ever makes sense for a light). But
+    the Atlas inspector offers this same Shape chooser for EVERY placed
+    class, and resolveLightShape (light_codes.js) already applies an
+    override generically regardless of class — so picking a shape for a
+    fan, a door, or any other non-light entity silently saved nothing
+    server-side, with no error shown. No domain check at all now, matching
+    what the frontend already does with the value; a fixed-glyph class
+    (motion/flood/temp/humidity/air/lock) has nothing to gain from an
+    override, but that's a UI decision (the inspector hides the control for
+    those — hasFixedGlyph), not something this schema needs to police.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(k): str(v) for k, v in raw.items()
+        if str(v) in _LIGHT_SHAPE_KINDS and str(k)
+    }
+
+
 def _normalize_showcase_theme(value: Any) -> str:
     """The Showcase-theme equivalent of _normalize_automorph_style above —
     same reasoning, same shared use by the live setter and the preset
@@ -507,17 +534,11 @@ async def ws_settings_set(hass: HomeAssistant, connection, msg) -> None:
             payload["lights_showcase_theme"] = _normalize_showcase_theme(msg["lights_showcase_theme"])
         if "lights_showcase_presets" in msg:
             payload["lights_showcase_presets"] = _sanitize_showcase_presets(msg["lights_showcase_presets"])
-        if "light_shapes" in msg:
-            # entity_id -> shape kind. Only known kinds are stored; an unknown
-            # value would just fall back to the default marker in the frontend,
-            # but there is no reason to persist junk. "auto" is expressed by
-            # omitting the entity, so it is never stored.
-            raw = msg["light_shapes"]
-            if isinstance(raw, dict):
-                payload["light_shapes"] = {
-                    str(k): str(v) for k, v in raw.items()
-                    if str(v) in _LIGHT_SHAPE_KINDS and str(k).startswith("light.")
-                }
+        if "light_shapes" in msg and isinstance(msg["light_shapes"], dict):
+            # A non-dict is ignored, not stored as empty — same discipline
+            # as every other dict-shaped setting here: a malformed payload
+            # must never wipe out what's already saved.
+            payload["light_shapes"] = _sanitize_light_shapes(msg["light_shapes"])
         if "light_type_overrides" in msg:
             # entity_id -> forced class (wled/partition/plain), same discipline
             # as light_shapes above: closed vocabulary, light.* keys only,
