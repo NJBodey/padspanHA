@@ -60,7 +60,10 @@ checking.
 
 ## 1. Where This Project Actually Stands Today
 
-### Scale (measured 2026-09-19)
+### Scale (measured 2026-09-19; re-checked same day after Phase 2 work
+started and already drifted — 2,022 tests/155 files/1,680 commits as of
+this note, not 2,008/154/1,667 below. Living numbers, not an error in
+either snapshot; don't chase them further in this doc.)
 - **7.5 months old** (first commit 2026-02-04) — 1,667 commits total.
 - **~37,300 lines of Python**, **~63,200 lines of JS** across 76 backend
   files and 44 frontend view files. The frontend outweighs the backend
@@ -172,18 +175,36 @@ instead of re-deriving from scratch (`docs/00_REPO_LOGIC_OVERVIEW.md`
 through `09_HARD_WON_RULES.md`), and — this is the finding that most
 directly answers "am I on the right path" — **evidence of a completed,
 closed-loop self-audit.** `docs/AUTOMORPH_CRITIQUE.md` is a genuine
-four-lens design review that found 27 real defects, 24 of which were
-applied, followed by an independent adversarial re-review that found 16
-*more* defects in the applied fixes themselves, all of which were also
-fixed, reproduction-first. That is, verbatim, the practice Simon Willison
-names as the top defense against architecture drift — periodically stepping
-back and asking a fresh pass to find what the forward-only building missed
-— and it is the single strongest piece of evidence in this repo that the
-project is being run with the right instincts, not just at high speed. (An
-earlier note in this session's memory described this critique as
-"unapplied" — that was wrong; reading the actual file shows 24 of 27 landed
-and the other 3 are deliberately deferred behind stated gates, not
-abandoned. Corrected here per the rule to verify before asserting.)
+four-lens design review that found 27 real defects, **22 of which were
+applied, 3 deliberately deferred behind stated gates (not abandoned),
+and 2 explicit no-change/rejected verdicts kept as guardrails** —
+followed by an independent adversarial re-review that found 16 *more*
+defects in the applied fixes themselves, all of which were also fixed,
+reproduction-first. That is, verbatim, the practice Simon Willison names
+as the top defense against architecture drift — periodically stepping
+back and asking a fresh pass to find what the forward-only building
+missed — and it is the single strongest piece of evidence in this repo
+that the project is being run with the right instincts, not just at high
+speed.
+
+**CORRECTED 2026-09-19, independently cross-checked via a second AI
+(codex) then verified by hand:** this section originally said "24 of 27
+... applied ... the other 3 are deliberately deferred," copied from
+`AUTOMORPH_CRITIQUE.md`'s own top-of-file summary without recounting it
+against the file's 27 individual per-finding `**Status:**` lines. Doing
+that count directly (`grep -c '^\*\*Status:\*\* Applied/Deferred/No
+change'`) gives 22 / 3 / 2 — the critique doc's own headline number is
+wrong by 2 (it appears to have folded the 2 "No change" guardrail
+verdicts into "applied" rather than reporting them as their own,
+third category). Two separate things were wrong here — an earlier
+session-memory note that called the critique "unapplied" (also
+corrected, in an earlier pass through this section) and this report's
+own repetition of the critique doc's own miscounted summary — both are
+about "did the self-audit actually get acted on," and the honest answer
+is still yes: 22 applied + 3 gated-not-abandoned + 2 deliberately
+rejected accounts cleanly for all 27, none silently dropped. The
+strength of this as evidence for §2's verdict is unchanged; only the
+specific number was wrong.
 
 **The caveat.** Today's own flood-sensor session produced a textbook,
 freshly-counted instance of the failure mode §3C and §3F below call
@@ -1443,31 +1464,51 @@ quality — and nothing in this repo shows it's been checked for.
   whitespace.
 
 **Added to the gap list (§4), not duplicating it:**
-- **4.9 — No independent security review**, against the documented
-  HACS third-party-integration vulnerability class, given PadSpan now
-  controls locks and holds alarm state. Doesn't need to be a paid audit
-  to start — a self-run pass against HA's own custom-integration
-  security guidance and the GitHub Security Lab's published methodology
-  beats the current "no review" state.
+- **4.9 — REVISED 2026-09-19 (codex cross-check, verified by hand): "no
+  independent security review" overstated as "nothing in this repo
+  shows it's been checked."** Real, deliberate security-conscious code
+  and tests already exist against exactly the vulnerability class named
+  below: `tests/test_maps_store.py::test_delete_map_rejects_path_traversal`
+  and `::test_replace_image_rejects_path_traversal` are targeted
+  path-traversal defenses with test coverage, not incidental. That's
+  narrower than a systematic security review (still doesn't exist), but
+  the claim that there's no evidence of security consideration was
+  wrong. Gap stands, softened: **no systematic/independent review**,
+  against the documented HACS third-party-integration vulnerability
+  class, given PadSpan now controls locks and holds alarm state — but
+  starting from "some targeted defenses already exist," not zero.
 - **4.10 — Occupancy-analytics confidence framing is unverified**, not
   confirmed broken. Whether Busy Times/Insights present any
   uncertainty framing on peak-occupancy/dwell-time numbers wasn't
   checked against the live UI in this pass — a five-minute look, not a
   research question.
-- **4.11 — "Residential-scale BMS" positioning is unvalidated by usage
-  data.** No incumbent surfaced combining PadSpan's four pillars, but
-  external research can't distinguish genuine whitespace from untested
-  demand — only PadSpan's own install-base adoption data can.
+- **4.11 — REVISED 2026-09-19 (codex cross-check, verified by hand): the
+  instrumentation this gap says is missing already exists.** Originally:
+  "'Residential-scale BMS' positioning is unvalidated by usage data...
+  only PadSpan's own install-base adoption data can [tell]." True that
+  it's unvalidated — but PadSpan already has a full opt-in telemetry
+  system (`telemetry.py`) tracking per-tab usage (`VIEWS`-keyed `tab:X`
+  events, covering Atlas/Locate/Busy-Times/flood-alarm exactly) feeding
+  an Install Base admin dashboard (`ws_telemetry.py`) already listed as
+  shipped in §1. The real remaining gap is analysis, not instrumentation:
+  query the already-flowing data for presence-only vs. broader-surface
+  adoption, not build new tracking.
 
 **Added to the Phase 2 plan (§5), sequenced after Phase 2a-2c:**
 - **Phase 2i — Independent security pass** (addresses 4.9): file/
   service-access-boundary review specifically, before the next feature
-  that touches locks or alarm state.
-- **Phase 2j — Instrument or survey feature adoption** (addresses 4.11):
+  that touches locks or alarm state — building on the path-traversal
+  defenses that already exist, not starting from nothing.
+- **Phase 2j — REVISED: query existing telemetry, don't build new
+  instrumentation (addresses 4.11).** Originally scoped as "instrument
+  or survey feature adoption" — the instrumentation already exists
+  (`telemetry.py`'s per-tab `VIEWS` tracking). This is now a data-pull
+  against the Install Base dashboard's already-collected numbers:
   presence-only vs. Atlas/Locate/Busy-Times/flood-alarm usage among
   current installs — the only available test for whether the
   residential-BMS breadth is earning its ~25-edit-per-feature cost, or
-  running ahead of demand.
+  running ahead of demand. Near-zero build cost now that the real scope
+  is known.
 - **Phase 2k — Check Busy Times/Insights against the Density
   confidence-framing bar** (addresses 4.10): either already there, in
   which case this closes in five minutes, or a small, well-scoped UI
@@ -1907,14 +1948,34 @@ current gap.
   map as device placement, and none place devices at measured
   centimetre accuracy (SmartThings/Matterport are qualitative/dollhouse-
   scale). Atlas + PadSpan's BLE fabric together is unoccupied territory.
-- **CHALLENGES, and this is the sharpest new finding of this pass**: the
-  single most consistent pattern across every serious competitor
-  (Samsung, Matterport, Apple's own dormant RoomPlan) is **automated
-  geometry acquisition** — scan, address lookup, photo-to-3D, or
-  professional capture — with manual entry as a fallback, not the only
-  path. Atlas's placement workflow is manual centimetre entry with no
-  automated fallback-*from* at all — the field has moved past this, and
-  it's a more consequential gap than the next device class.
+- **CHALLENGES, and this is the sharpest new finding of this pass —
+  CORRECTED 2026-09-19, independently cross-checked via a second AI
+  (codex) then verified by hand, see below**: the single most
+  consistent pattern across every serious competitor (Samsung,
+  Matterport, Apple's own dormant RoomPlan) is **automated geometry
+  acquisition** — scan, address lookup, photo-to-3D, or professional
+  capture — with manual entry as a fallback, not the only path. ~~Atlas's
+  placement workflow is manual centimetre entry with no automated
+  fallback-*from* at all~~ — **false as stated.** `custom_components/padspan_ha/sh3d_import.py`
+  and `ws_floorplan_import.py` already import Sweet Home 3D (.sh3d)
+  floorplans into candidate room polygons (`maps.js`'s Rooms tab, the
+  same "candidates" preview/edit/commit mechanism used elsewhere), and
+  Atlas already has assisted bulk placement (`spreadInRoom`, "⊞ Spread
+  in room") and a tap-to-place queue — not literal blank-canvas manual
+  entry for every fixture. More consequentially: `sh3d_import.py`'s own
+  docstring says this is *"gap #7 tier 1, best-in-class roadmap:
+  Floorplan import: Sweet Home 3D first, then RoomPlan JSON, then image
+  room-detection"* — and `docs/BEST_IN_CLASS_ROADMAP.md` (which this
+  very report cites elsewhere as prior research, §G) already lists tier
+  1 (Sweet Home 3D) as **DONE (commit 9c10575)** and tier 2 (RoomPlan
+  JSON) as explicitly **REMAINING**, written 2026-09-05 — two weeks
+  before this angle's research ran. The research agent that wrote this
+  finding didn't check the project's own existing roadmap doc before
+  presenting automated geometry acquisition as an undiscovered gap. It
+  is not one: PadSpan already scoped it, already shipped tier 1, and
+  RoomPlan JSON (tier 2) was already the planned next step — this
+  report independently re-derived a conclusion the project had already
+  reached.
 - **CHALLENGES the self-description, not the product**: "digital twin"
   unqualified both overclaims (no predictive/simulation layer exists,
   per the IBM definition) and collides with Digs' unrelated, funded use
@@ -1929,26 +1990,36 @@ current gap.
 **Verdict on this angle:** on the core question — is PadSpan on the right
 path pursuing a visual, spatial, device-and-presence map, rather than
 just adding device classes — **yes**, and independently confirmed at
-every market tier researched, not merely agreeing with the premise. The
-correction is specific and actionable: the "killer feature" this angle
-turned up is **automated geometry acquisition** (concretely buildable
-today via Apple's free, on-device, already-proven-in-third-party-apps
-RoomPlan API — scan a room once, hand Atlas a starting geometry to
-fine-tune instead of a blank canvas and a ruler), not another Atlas
-device class, and it's more consequential to trajectory than whichever
-device class is next in line. Two lower-urgency, evidence-backed
-secondary findings: PadSpan's own Insights/Busy-Times historical data is
-a real, currently unexploited asset (no competitor found exposes anything
-predictive to end users — closing that gap is the one move that would
-make "digital twin" literally true rather than aspirational), and Savant
-TrueImage's photo-as-control-surface paradigm deserves a deliberate
-stance rather than remaining an unconsidered option.
+every market tier researched, not merely agreeing with the premise.
+**The "killer feature" framing below is corrected**, per the finding
+above: automated geometry acquisition is not an undiscovered gap, it's
+already 1/3 shipped (Sweet Home 3D, tier 1) against a plan this project
+already wrote down (`docs/BEST_IN_CLASS_ROADMAP.md`, 2026-09-05) that
+already names RoomPlan JSON as tier 2. The real, still-live value of
+this angle's research is narrower but genuine: it independently confirms
+tier 2 (RoomPlan) is worth prioritizing — three unrelated competitors
+converging on "automated capture, manual as fallback" is real evidence
+the existing roadmap's own ordering is right, not just plausible — and
+it surfaces two things the existing roadmap doesn't mention: Savant
+TrueImage's photo-as-control-surface paradigm (worth a deliberate stance
+either way) and that PadSpan's own Insights/Busy-Times historical data
+is unexploited relative to what "digital twin" implies. Two lower-urgency
+findings stand as before: closing the predictive/historical-data gap is
+the one move that would make "digital twin" literally true rather than
+aspirational, and the TrueImage paradigm deserves a considered yes/no
+rather than staying unconsidered.
 
 **Added to the gap list (§4), continuing the numbering:**
-- **4.12 — No automated geometry-acquisition path for Atlas placement.**
-  100% manual cm entry today; every serious competitor researched has at
-  least one automated capture path. The single most research-validated
-  gap in this entire report across all angles.
+- **4.12 — REVISED: tier 2 of an already-planned rollout, not a new
+  gap.** Originally stated as "no automated geometry-acquisition path
+  for Atlas placement... 100% manual cm entry... the single most
+  research-validated gap in this entire report" — corrected above: tier
+  1 (Sweet Home 3D import) already shipped, tier 2 (RoomPlan JSON) was
+  already the documented next step in `docs/BEST_IN_CLASS_ROADMAP.md`
+  before this angle's research ran. What this research pass actually
+  adds: independent, three-competitor confirmation that tier 2 is worth
+  doing next, ahead of other backlog items — real signal, just not a
+  new discovery.
 - **4.13 — "Digital twin" as unqualified self-description invites two
   avoidable category collisions** — with predictive-simulation twins
   (PadSpan has no forward/what-if capability) and with Digs' static
@@ -1956,13 +2027,16 @@ stance rather than remaining an unconsidered option.
   to the actual pitch.
 
 **Added to the Phase 2 plan (§5):**
-- **Phase 2q — Scan-to-place: a RoomPlan-based capture companion for
-  Atlas** (addresses 4.12). Spec/prototype a flow where a user scans a
+- **Phase 2q — REVISED: this is tier 2 of the existing floorplan-import
+  rollout (`docs/BEST_IN_CLASS_ROADMAP.md` gap #7), re-prioritize it
+  rather than treat it as new scope.** RoomPlan JSON capture companion
+  for Atlas (addresses 4.12). Spec/prototype a flow where a user scans a
   room once with a LiDAR iPhone/iPad via Apple's free RoomPlan API,
-  exports wall/door/window geometry, and Atlas ingests it as a starting
-  placement to fine-tune rather than build from a blank canvas. *Verify:*
-  scan one real room, measure time-to-usable-placement against the
-  current manual workflow for the same room.
+  exports wall/door/window geometry, and Atlas ingests it through the
+  same candidate-layout mechanism `sh3d_import.py` already uses rather
+  than building a second import/preview UI. *Verify:* scan one real
+  room, measure time-to-usable-placement against the current SH3D-import
+  and manual workflows for the same room.
 - **Phase 2r — Positioning correction** (addresses 4.13): drop
   unqualified "digital twin" from README/marketing copy in favour of the
   language that claims PadSpan's actually-undefended territory
