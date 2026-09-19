@@ -609,6 +609,16 @@ async def ws_settings_set(hass: HomeAssistant, connection, msg) -> None:
         if "onboarding_completed" in msg:
             payload["onboarding_completed"] = bool(msg["onboarding_completed"])
         if "espresense_companion_url" in msg:
+            # Admin-only (Phase 2i security audit, 2026-09-19): this URL is
+            # later fetched server-side, verbatim, by the admin-only
+            # espresense_companion_import command — a non-admin account
+            # staging an arbitrary host here (internal, a cloud metadata
+            # address) and waiting for an admin to click Import was the
+            # actual attack shape found. Same gate as telemetry_enabled above.
+            _user = getattr(connection, "user", None)
+            if _user is not None and getattr(_user, "is_admin", True) is False:
+                connection.send_error(msg["id"], "unauthorized", "Only an administrator can change the ESPresense Companion URL")
+                return
             _url = str(msg["espresense_companion_url"]).strip().rstrip("/")
             payload["espresense_companion_url"] = _url
         if "espresense_topic_prefix" in msg:
@@ -638,18 +648,39 @@ async def ws_settings_set(hass: HomeAssistant, connection, msg) -> None:
         if "occupancy_hybrid_enabled" in msg:
             payload["occupancy_hybrid_enabled"] = bool(msg["occupancy_hybrid_enabled"])
         if "padspan_automations" in msg:
-            # Validate and sanitize each rule
+            # Validate and sanitize each rule. Security-relevant, not just
+            # tidy input: presence_coordinator.py executes these unattended
+            # on a BLE arrive/depart trigger via
+            # hass.services.async_call(domain-from-entity_id, action, ...)
+            # with no allowlist of its own — found in the Phase 2i security
+            # audit, 2026-09-19. Before this, ANY domain/service pair a
+            # client stored would fire (lock.unlock, alarm_control_panel.
+            # alarm_disarm, ...), and this command has no require_admin, so
+            # any signed-in non-admin HA account (the padspan-ha panel is
+            # itself require_admin=False) could wire a lock or an alarm
+            # panel to a BLE presence trigger with zero human confirmation.
+            # The UI (settings.js) has only ever offered turn_on/turn_off
+            # against light./switch./scene./script. entities — this is the
+            # SAME allowlist, enforced server-side rather than trusted from
+            # the client that's supposed to be the only one using it.
             _clean_rules = []
             for r in (msg["padspan_automations"] or []):
                 if not isinstance(r, dict):
+                    continue
+                _action = str(r.get("action", ""))[:20]
+                _eid = str(r.get("entity_id", ""))[:120]
+                _domain = _eid.split(".", 1)[0] if "." in _eid else ""
+                if _action not in ("turn_on", "turn_off") or _domain not in (
+                    "light", "switch", "scene", "script"
+                ):
                     continue
                 _clean_rules.append({
                     "id": str(r.get("id", "")),
                     "trigger": str(r.get("trigger", ""))[:10],
                     "device_key": str(r.get("device_key", "")),
                     "device_label": str(r.get("device_label", ""))[:80],
-                    "action": str(r.get("action", ""))[:20],
-                    "entity_id": str(r.get("entity_id", ""))[:120],
+                    "action": _action,
+                    "entity_id": _eid,
                     "enabled": bool(r.get("enabled", True)),
                 })
             payload["padspan_automations"] = _clean_rules
