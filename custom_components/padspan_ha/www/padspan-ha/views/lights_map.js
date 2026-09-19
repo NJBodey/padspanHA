@@ -310,6 +310,63 @@ export function floodIsAlarming(l, floodLatches){
   return floodLatchActive(latch && latch.triggered_at, Date.now());
 }
 
+// One class-driven answer to "what does this entity's state read as, and is
+// it lit/active" — openAggregateSheet's render chain, buildLightsTable's
+// render chain, and buildLightsTable's own separate sort-key chain each
+// used to answer this with their own hand-written per-class if/else (found
+// in the Phase 2a registry audit, 2026-09-19 — two live bugs already
+// shipped from the three copies disagreeing: a locked lock read "Off" in
+// one chain that had no lock branch, and the flood latch was invisible to
+// the sort key in another).
+//
+// Returns null for the CONTROLLABLE classes without their own special word
+// (light/wled/partition/fan) — those keep building their own generic
+// On/Off (+ optional Controls "⋯") button, unchanged; lock IS controllable
+// but has its own word (LOCKED/UNLOCKED/JAMMED) and its own Lock/Unlock
+// button, so it's handled here like the read-only classes are.
+//
+// `locked`/`latched` are handed back, not baked into a button, because the
+// two hosts build that button in genuinely different DOM idioms (mk() vs
+// el()) — unifying the WORD and the SORT VALUE retires the actual
+// duplicated logic; the markup stays each host's own.
+export function stateWordOf(l, floodLatches){
+  if (l.isMotion) {
+    const on = l.state === "on";
+    return { text: on ? "MOTION" : "clear", lit: on, sortValue: on ? 1 : 0 };
+  }
+  if (l.isLock) {
+    const jammed = l.state === "jammed";
+    const locked = l.state === "locked";
+    return { text: jammed ? "JAMMED" : (locked ? "LOCKED" : "UNLOCKED"), lit: !jammed && locked, sortValue: locked ? 1 : 0, locked };
+  }
+  if (l.isTemp) {
+    const v = Number.isFinite(l.temperature) ? l.temperature : null;
+    return { text: v !== null ? `${v}°` : "—", lit: false, sortValue: v !== null ? v : -Infinity };
+  }
+  if (l.isHumidity) {
+    const v = Number.isFinite(l.humidity) ? l.humidity : null;
+    return { text: v !== null ? `${v}%` : "—", lit: false, sortValue: v !== null ? v : -Infinity };
+  }
+  if (l.isAir) {
+    const b = airQualityBadness(l);
+    return { text: airQualityLabel(l), lit: false, sortValue: Number.isFinite(b) ? b : -Infinity };
+  }
+  if (l.isDoor) {
+    const on = l.state === "on";
+    return { text: on ? "OPEN" : "CLOSED", lit: on, sortValue: on ? 1 : 0 };
+  }
+  if (l.isFlood) {
+    // Latched (flood_latch.py) beats live state — a sensor that's dried
+    // out but is still within its 2-day alarm window reads ALARM, not DRY;
+    // the whole point of latching is not to look clear the moment it isn't.
+    const on = l.state === "on";
+    const latch = (floodLatches || {})[l.entity_id];
+    const latched = floodLatchActive(latch && latch.triggered_at, Date.now());
+    return { text: on ? "WET" : (latched ? "ALARM" : "DRY"), lit: on || latched, sortValue: (on || latched) ? 1 : 0, latched };
+  }
+  return null;
+}
+
 // ── Spread in room ───────────────────────────────────────────────────────────
 // Bulk placement without dragging a pile apart: n evenly-spaced metre points
 // inside a room polygon, inset from its walls, row-major from the top-left —
@@ -806,51 +863,23 @@ export function openAggregateSheet(api, { title, sub, items, actions }){
     sheet.appendChild(row);
   }
   for (const l of items) {
-    // A lock's "on" is "locked" — its state is never the string "on", so
-    // the generic on/off fallback below always read it as Off (found in the
-    // Phase 2a registry audit, 2026-09-19: a locked lock's row read "Off"
-    // and got an On/Off button whose label logic could never agree with a
-    // lock's real state, even once the toggle itself started working).
-    const on = l.isLock ? l.state === "locked" : l.state === "on";
     const row = mk("div", _S.row);
     const col = classBorder(l, "#52b788");
     row.appendChild(mk("span", _S.code + `;color:${col}`, l.code));
     row.appendChild(mk("span", _S.name, l.friendly_name));
-    if (l.isMotion) {
-      row.appendChild(mk("span", _S.state(on), on ? "MOTION" : "clear"));
-    } else if (l.isLock) {
-      row.appendChild(mk("span", _S.state(l.state === "jammed" ? false : on),
-        l.state === "jammed" ? "JAMMED" : (on ? "LOCKED" : "UNLOCKED")));
-      const b = mk("button", _S.onoff(on), on ? "Unlock" : "Lock");
-      b.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const wasOn = b.textContent === "Unlock";
-        api.toggle(l.entity_id);
-        b.style.cssText = _S.onoff(!wasOn); b.textContent = wasOn ? "Lock" : "Unlock";
-      });
-      row.appendChild(b);
-    } else if (l.isTemp) {
-      row.appendChild(mk("span", _S.state(false), Number.isFinite(l.temperature) ? `${l.temperature}°` : "—"));
-    } else if (l.isHumidity) {
-      row.appendChild(mk("span", _S.state(false), Number.isFinite(l.humidity) ? `${l.humidity}%` : "—"));
-    } else if (l.isAir) {
-      // Read-only, like temp: the reading, its unit and the band word.
-      row.appendChild(mk("span", _S.state(false), airQualityLabel(l)));
-    } else if (l.isDoor) {
-      // Read-only, same as motion/temp above — a door/window sensor is not
-      // a switch, and the generic On/Off button below would fire a toggle
-      // that does nothing but surface a read-only toast.
-      row.appendChild(mk("span", _S.state(on), on ? "OPEN" : "CLOSED"));
-    } else if (l.isFlood) {
-      // Read-only, same as door above — the red ring on the map already
-      // carries the alarm, this is just the word form of it. Latched
-      // (flood_latch.py) beats live state: a sensor that's dried out but
-      // is still within its 2-day alarm window reads ALARM, not DRY — the
-      // whole point of latching is not to look clear the moment it isn't.
-      const latch = (api.floodLatches || {})[l.entity_id];
-      const latched = floodLatchActive(latch && latch.triggered_at, Date.now());
-      row.appendChild(mk("span", _S.state(on || latched), on ? "WET" : (latched ? "ALARM" : "DRY")));
-      if (latched && api.onFloodReset) {
+    const sw = stateWordOf(l, api.floodLatches);
+    if (sw) {
+      row.appendChild(mk("span", _S.state(sw.lit), sw.text));
+      if (l.isLock) {
+        const b = mk("button", _S.onoff(sw.locked), sw.locked ? "Unlock" : "Lock");
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const wasLocked = b.textContent === "Unlock";
+          api.toggle(l.entity_id);
+          b.style.cssText = _S.onoff(!wasLocked); b.textContent = wasLocked ? "Lock" : "Unlock";
+        });
+        row.appendChild(b);
+      } else if (l.isFlood && sw.latched && api.onFloodReset) {
         const wrap = mk("span");
         const makeResetBtn = () => {
           const b = mk("button", _S.act + ";padding:3px 10px;min-height:26px;font-size:10px", "Reset");
@@ -869,6 +898,9 @@ export function openAggregateSheet(api, { title, sub, items, actions }){
         row.appendChild(wrap);
       }
     } else {
+      // Controllable, no special word — light/wled/partition/fan's plain
+      // generic On/Off (+ optional Controls "⋯") button.
+      const on = l.state === "on";
       const b = mk("button", _S.onoff(on), on ? "On" : "Off");
       b.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2595,17 +2627,13 @@ export function buildLightsTable(host, lights){
     ["brand", "Brand", (l) => (l.brand || "").toLowerCase()],
     // Sorted on exactly what the State column DISPLAYS — a temperature
     // reading numerically (so 105° sorts above 68°, not alphabetically),
-    // everything else by its actual on/off.
-    ["state", "State", (l) => l.isTemp ? (Number.isFinite(l.temperature) ? l.temperature : -Infinity)
-      : l.isHumidity ? (Number.isFinite(l.humidity) ? l.humidity : -Infinity)
-      : l.isAir ? (Number.isFinite(airQualityBadness(l)) ? airQualityBadness(l) : -Infinity)   // numeric OR graded word, one scale
-      : l.isLock ? (l.state === "locked" ? 1 : 0)
-      // Latched beats live, same as the displayed word (found in the Phase
-      // 2a registry audit, 2026-09-19) — a dried-out sensor still inside
-      // its 2-day alarm window reads ALARM and must sort as active, not
-      // fall to the bottom with a genuinely dry one.
-      : l.isFlood ? (floodIsAlarming(l, host.floodLatches) ? 1 : 0)
-      : (l.state === "on" ? 1 : 0)],
+    // everything else by its actual on/off. stateWordOf's sortValue IS that
+    // displayed value (Phase 2a follow-up, 2026-09-19) — this used to be a
+    // fourth independent hand-written copy of the same per-class chain as
+    // openAggregateSheet and this table's own render chain below; one of
+    // those three had already drifted (the flood latch was invisible to
+    // this exact sort key until fixed by hand, separately, the same day).
+    ["state", "State", (l) => { const sw = stateWordOf(l, host.floodLatches); return sw ? sw.sortValue : (l.state === "on" ? 1 : 0); }],
   ];
   const th = (key, label, extraStyle) => {
     if (!key || !host.onTableSort) return el("th", { style: extraStyle || "" }, label);
@@ -2727,49 +2755,35 @@ export function buildLightsTable(host, lights){
                (l.healthy ? "" : "box-shadow:0 0 4px #f87171bb"),
       })),
       el("td", { class: "muted", style: "font-size:11px" }, l.brand || "—"),
-      el("td", {}, l.isMotion
-        // Found in the Phase 2a registry audit, 2026-09-19: this chain had
-        // no motion branch, so it read the generic ON/OFF fallback where
-        // the room/floor sheet's identical chain (openAggregateSheet) reads
-        // MOTION/clear for the exact same sensor.
-        ? el("span", { class: `lv-state ${on ? "on" : "off"}` }, on ? "MOTION" : "clear")
-        : l.isTemp
-        ? el("span", { class: "lv-state off" }, Number.isFinite(l.temperature) ? `${l.temperature}°` : "—")
-        : l.isHumidity
-        ? el("span", { class: "lv-state off" }, Number.isFinite(l.humidity) ? `${l.humidity}%` : "—")
-        : l.isAir
-        ? el("span", { class: "lv-state off", title: "Air quality — read-only" }, airQualityLabel(l))
-        : l.isLock
-        ? el("span", { class: `lv-state ${l.state === "jammed" ? "off" : (on ? "on" : "off")}` },
-             l.state === "jammed" ? "JAMMED" : (on ? "LOCKED" : "UNLOCKED"))
-        : l.isDoor
-        ? el("span", { class: `lv-state ${on ? "on" : "off"}` }, on ? "OPEN" : "CLOSED")
-        : l.isFlood
-        ? (() => {
-            // Latched (flood_latch.py) beats live state — see the room/floor
-            // sheet's identical reasoning in openAggregateSheet.
-            const latch = (host.floodLatches || {})[l.entity_id];
-            const latched = floodLatchActive(latch && latch.triggered_at, Date.now());
-            const stateSpan = el("span", { class: `lv-state ${(on || latched) ? "on" : "off"}`, title: "Emergency (flood) — read-only" }, on ? "WET" : (latched ? "ALARM" : "DRY"));
-            if (!latched || !host.onFloodReset) return stateSpan;
-            const wrap = el("span", { style: "margin-left:6px;display:inline-block" });
-            const makeResetBtn = () => {
-              const b = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px" }, "Reset");
-              b.addEventListener("click", (e) => {
-                e.stopPropagation();
-                wrap.innerHTML = "";
-                const yes = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px;background:#7f1d1d;border-color:#dc2626;color:#fecaca" }, "Yes, clear it");
-                const no = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px" }, "No");
-                yes.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; host.onFloodReset(l.entity_id); });
-                no.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; wrap.appendChild(makeResetBtn()); });
-                wrap.appendChild(yes); wrap.appendChild(no);
-              });
-              return b;
-            };
-            wrap.appendChild(makeResetBtn());
-            return el("span", {}, [stateSpan, wrap]);
-          })()
-        : el("span", { class: `lv-state ${on ? "on" : "off"}` }, on ? "ON" : "OFF")),
+      el("td", {}, (() => {
+        // stateWordOf (Phase 2a follow-up, 2026-09-19) — was four
+        // independent hand-written chains across this file (this one, the
+        // room/floor sheet's, and this table's own separate sort key);
+        // two had already drifted into live bugs (a locked lock read "Off"
+        // here once, the flood latch was invisible to the sort key).
+        const sw = stateWordOf(l, host.floodLatches);
+        if (!sw) return el("span", { class: `lv-state ${on ? "on" : "off"}` }, on ? "ON" : "OFF");
+        const stateSpan = el("span", { class: `lv-state ${sw.lit ? "on" : "off"}` }, sw.text);
+        if (l.isFlood && sw.latched && host.onFloodReset) {
+          const wrap = el("span", { style: "margin-left:6px;display:inline-block" });
+          const makeResetBtn = () => {
+            const b = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px" }, "Reset");
+            b.addEventListener("click", (e) => {
+              e.stopPropagation();
+              wrap.innerHTML = "";
+              const yes = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px;background:#7f1d1d;border-color:#dc2626;color:#fecaca" }, "Yes, clear it");
+              const no = el("button", { class: "btn tiny", style: "font-size:10px;padding:2px 8px" }, "No");
+              yes.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; host.onFloodReset(l.entity_id); });
+              no.addEventListener("click", (e2) => { e2.stopPropagation(); wrap.innerHTML = ""; wrap.appendChild(makeResetBtn()); });
+              wrap.appendChild(yes); wrap.appendChild(no);
+            });
+            return b;
+          };
+          wrap.appendChild(makeResetBtn());
+          return el("span", {}, [stateSpan, wrap]);
+        }
+        return stateSpan;
+      })()),
       // Its own column, next to State (Garry, 2026-09-07: "we still need
       // another option next to state... a reassign to another device type
       // pulldown" — it used to be buried in the far-right actions column,
