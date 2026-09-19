@@ -2,7 +2,7 @@
 
 ### The most comprehensive BLE room-presence system for Home Assistant
 
-PadSpan™ HA goes far beyond "home or away." It tells you **which room** every Bluetooth device is in — updated every 5 seconds — with interactive floor plans, 3D multi-floor visualizations, a full calibration system, and 26 dedicated views. No other Home Assistant BLE integration comes close.
+PadSpan™ HA goes far beyond "home or away." It tells you **which room** every Bluetooth device is in — updated every 5 seconds — with interactive floor plans, 3D multi-floor visualizations, a full calibration system, and 22 dedicated views. No other Home Assistant BLE integration comes close.
 
 🌐 **Website: [padspan.traks.ca](https://padspan.traks.ca)**
 
@@ -146,7 +146,7 @@ See the [Atlas Guide](docs/ATLAS_GUIDE.md) for a full walkthrough. Placement, Au
 
 ### UI & Experience
 - **Pure Live mode** — immersive full-screen 3D dashboard with pan/zoom, floating glass overlays, and collapsible info panels
-- **26 dedicated views** with Basic and Advanced modes
+- **22 dedicated views** with Basic and Advanced modes
 - **5-step onboarding wizard** with auto-detection and progress tracking
 - Dark forest-green theme designed for always-on displays
 - Built-in **Training Hub** with 16 animated walkthroughs + full manual
@@ -184,13 +184,13 @@ See the [Atlas Guide](docs/ATLAS_GUIDE.md) for a full walkthrough. Placement, Au
 | Fingerprint calibration | ✅ | — | — | — |
 | Hybrid occupancy counting | ✅ | — | — | — |
 | Stable device identity | ✅ | — | — | — |
-| Training hub (14 walkthroughs) | ✅ | — | — | — |
+| Training hub (16 walkthroughs) | ✅ | — | — | — |
 | Follow mode + email alerts | ✅ | — | — | — |
 | Onboarding wizard | ✅ | — | — | — |
 | Movement history playback | ✅ | — | — | — |
 | Sample/demo mode | ✅ | — | — | — |
 | Multi-language (11) | ✅ | — | — | — |
-| Dedicated UI views | 26 | Config flow | MQTT config | Web UI |
+| Dedicated UI views | 22 | Config flow | MQTT config | Web UI |
 | HA sensor entities | ✅ | ✅ | ✅ | ✅ |
 | Distance estimation | ✅ | ✅ | — | ✅ |
 | Kalman RSSI filtering | ✅ | — | — | — |
