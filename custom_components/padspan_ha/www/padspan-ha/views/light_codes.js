@@ -405,9 +405,14 @@ const _WHOLE_DOMAINS = ["light.", "fan."];
 // (isMotionSensor, isFloodSensor, ...), run against a lightweight stub
 // built straight from the raw entity_id/attrs, the exact shape those
 // functions already expect (they only ever read .entity_id/.device_class/
-// .friendly_name). light/wled/partition/fan are excluded: they're admitted
-// by domain above, and their own classifiers need real light attributes
-// (effect_list, platform) a bare HA-state stub can never carry.
+// .friendly_name). light/wled/partition are excluded (castsLight: true):
+// they're admitted by domain above, and their own classifiers need real
+// light attributes (effect_list, platform) a bare HA-state stub can never
+// carry. fan is NOT excluded by this filter (its castsLight is false, same
+// as every read-only sensor class) — it stays harmless only because
+// _WHOLE_DOMAINS above already admits every fan.* entity first, so
+// isFan's stub-reachable branch (bare "fan." prefix; type_override can
+// never reach it from a bare stub) is never actually consulted here.
 const _TESTABLE_CLASSES = DEVICE_CLASSES.filter(c => c.test && !c.castsLight);
 // Is this entity one Atlas admits at all? The single predicate gatherLights'
 // own admission filter and ensureLightsRegistry's separate areaMap filter
