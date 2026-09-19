@@ -30,7 +30,7 @@ const { ensureLightsRegistry, gatherLights, buildLightsMapCard, buildLightsTable
         isOutdoorFloorId, wireHoverHud, pressRing, HOLD_MS, PRESS_RING_MS } =
   await import(`./lights_map.js${new URL(import.meta.url).search}`);
 // Fixture-shape vocabulary + derivation (the tab owns the manual override UI).
-const { LIGHT_SHAPES, deriveLightShape, isControllable, deviceClassOf } =
+const { LIGHT_SHAPES, deriveLightShape, isControllable, deviceClassOf, hasControlCard } =
   await import(`./light_codes.js${new URL(import.meta.url).search}`);
 // "Is this map-setup step done?" — shared with the Overview onboarding
 // checklist (panel.js) so the two can never disagree about what's finished.
@@ -8651,7 +8651,7 @@ function _lightsTab(ctx, maps, active) {
     }
   };
   // The sidebar's exact api, for Preview-as-sidebar (shared use surface).
-  const controlsFor = (l0) => !!(l0 && (l0.isWled || l0.isPartition || l0.dimmable || l0.isFan));
+  const controlsFor = hasControlCard;
   const previewApi = {
     hass: ctx.hass, lightsByEid, lights, controlsFor,
     toggle, toast: (m, e) => ctx.toast(m, e), rerender: () => ctx.actions.renderRooms(),

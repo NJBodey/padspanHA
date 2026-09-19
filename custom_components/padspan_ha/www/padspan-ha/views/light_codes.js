@@ -349,19 +349,22 @@ export const FLOOD_BORDER = "#ef4444";
 //                a bare placement is the whole placement (see lightIsTouched).
 //                A door is NOT this: it is never a point marker at all, it is
 //                a linked section of wall.
+//   controlCard  the class itself has a detail card behind a hold / the ⋯
+//                button (speed, effects, lock/unlock). A plain light earns one
+//                only by being dimmable — see hasControlCard.
 //   health       which healthOf() strategy applies beyond plain reachability
 export const DEVICE_CLASSES = [
-  { key: "fan",       flagKey: "isFan",       test: isFan,              code: "F", border: FAN_BORDER,       shape: "fan",             filterClass: "fan",      castsLight: false, controllable: true,  fixedGlyph: false, health: null },
-  { key: "motion",    flagKey: "isMotion",    test: isMotionSensor,     code: "M", border: MOTION_BORDER,    shape: "motion",          filterClass: "motion",   castsLight: false, controllable: false, fixedGlyph: true,  health: "stuck_on" },
-  { key: "door",      flagKey: "isDoor",      test: isDoorSensor,       code: "D", border: DOOR_BORDER,      shape: "door",            filterClass: "door",     castsLight: false, controllable: false, fixedGlyph: false, health: "left_open" },
-  { key: "flood",     flagKey: "isFlood",     test: isFloodSensor,      code: "K", border: FLOOD_BORDER,     shape: "flood",           filterClass: "flood",    castsLight: false, controllable: false, fixedGlyph: true,  health: null },
-  { key: "air",       flagKey: "isAir",       test: isAirQualitySensor, code: "Q", border: AIR_BORDER,       shape: "airquality",      filterClass: "air",      castsLight: false, controllable: false, fixedGlyph: true,  health: "fresh" },
-  { key: "humidity",  flagKey: "isHumidity",  test: isHumiditySensor,   code: "H", border: HUMIDITY_BORDER,  shape: "humidityreadout", filterClass: "humidity", castsLight: false, controllable: false, fixedGlyph: true,  health: "fresh" },
-  { key: "temp",      flagKey: "isTemp",      test: isTempSensor,       code: "T", border: TEMP_BORDER,      shape: "tempreadout",     filterClass: "temp",     castsLight: false, controllable: false, fixedGlyph: true,  health: "fresh" },
-  { key: "lock",      flagKey: "isLock",      test: isLock,             code: "L", border: LOCK_BORDER,      shape: "lock",            filterClass: "lock",     castsLight: false, controllable: true,  fixedGlyph: true,  health: "jammed" },
-  { key: "wled",      flagKey: "isWled",      test: isWledLight,        code: "W", border: WLED_BORDER,      shape: null,              filterClass: "strip",    castsLight: true,  controllable: true,  fixedGlyph: false, health: "effects" },
-  { key: "partition", flagKey: "isPartition", test: isPartitionLight,   code: "P", border: PARTITION_BORDER, shape: null,              filterClass: "strip",    castsLight: true,  controllable: true,  fixedGlyph: false, health: null },
-  { key: "light",     flagKey: null,          test: null,               code: null, border: null,            shape: null,              filterClass: "light",    castsLight: true,  controllable: true,  fixedGlyph: false, health: null },
+  { key: "fan",       flagKey: "isFan",       test: isFan,              code: "F", border: FAN_BORDER,       shape: "fan",             filterClass: "fan",      castsLight: false, controllable: true,  fixedGlyph: false, controlCard: true,  health: null },
+  { key: "motion",    flagKey: "isMotion",    test: isMotionSensor,     code: "M", border: MOTION_BORDER,    shape: "motion",          filterClass: "motion",   castsLight: false, controllable: false, fixedGlyph: true,  controlCard: false, health: "stuck_on" },
+  { key: "door",      flagKey: "isDoor",      test: isDoorSensor,       code: "D", border: DOOR_BORDER,      shape: "door",            filterClass: "door",     castsLight: false, controllable: false, fixedGlyph: false, controlCard: false, health: "left_open" },
+  { key: "flood",     flagKey: "isFlood",     test: isFloodSensor,      code: "K", border: FLOOD_BORDER,     shape: "flood",           filterClass: "flood",    castsLight: false, controllable: false, fixedGlyph: true,  controlCard: false, health: null },
+  { key: "air",       flagKey: "isAir",       test: isAirQualitySensor, code: "Q", border: AIR_BORDER,       shape: "airquality",      filterClass: "air",      castsLight: false, controllable: false, fixedGlyph: true,  controlCard: false, health: "fresh" },
+  { key: "humidity",  flagKey: "isHumidity",  test: isHumiditySensor,   code: "H", border: HUMIDITY_BORDER,  shape: "humidityreadout", filterClass: "humidity", castsLight: false, controllable: false, fixedGlyph: true,  controlCard: false, health: "fresh" },
+  { key: "temp",      flagKey: "isTemp",      test: isTempSensor,       code: "T", border: TEMP_BORDER,      shape: "tempreadout",     filterClass: "temp",     castsLight: false, controllable: false, fixedGlyph: true,  controlCard: false, health: "fresh" },
+  { key: "lock",      flagKey: "isLock",      test: isLock,             code: "L", border: LOCK_BORDER,      shape: "lock",            filterClass: "lock",     castsLight: false, controllable: true,  fixedGlyph: true,  controlCard: true,  health: "jammed" },
+  { key: "wled",      flagKey: "isWled",      test: isWledLight,        code: "W", border: WLED_BORDER,      shape: null,              filterClass: "strip",    castsLight: true,  controllable: true,  fixedGlyph: false, controlCard: true,  health: "effects" },
+  { key: "partition", flagKey: "isPartition", test: isPartitionLight,   code: "P", border: PARTITION_BORDER, shape: null,              filterClass: "strip",    castsLight: true,  controllable: true,  fixedGlyph: false, controlCard: true,  health: null },
+  { key: "light",     flagKey: null,          test: null,               code: null, border: null,            shape: null,              filterClass: "light",    castsLight: true,  controllable: true,  fixedGlyph: false, controlCard: false, health: null },
 ];
 const _PLAIN_LIGHT = DEVICE_CLASSES[DEVICE_CLASSES.length - 1];
 
@@ -377,6 +380,12 @@ export function castsLight(l) { return deviceClassOf(l).castsLight; }
 // Does it have a real action to offer — a toggle, a lock/unlock? False for
 // the read-only sensor classes: no Turn On/Off, no Controls button.
 export function isControllable(l) { return deviceClassOf(l).controllable; }
+// Is there a control card to open for it? By class, or — for any light — by
+// being dimmable. This rule used to be typed out four times across the two
+// hosts, and the builder's "Preview as sidebar" copy had drifted from the
+// sidebar it previews (no lock), so a lock's hold opened its card in one and
+// not the other.
+export function hasControlCard(l) { return !!(l && (l.dimmable || deviceClassOf(l).controlCard)); }
 // One fixed glyph with nothing to size, turn or tint (see the table's note).
 export function hasFixedGlyph(l) { return deviceClassOf(l).fixedGlyph; }
 // The class colour — marker border, code chip, index swatch — or `fallback`

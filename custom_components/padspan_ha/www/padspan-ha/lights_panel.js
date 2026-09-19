@@ -17,7 +17,7 @@ const BUILD_ID = "20260918T215543Z";
 
 // Query inherited from our own module URL so the ?b= cache-buster propagates
 // (see docs/06_UI_CACHE_BUSTING.md).
-const { isWledLight, isPartitionLight } =
+const { hasControlCard } =
   await import(`./views/light_codes.js${new URL(import.meta.url).search}`);
 // THE shared lights view — data pipeline, map card and index table, also used
 // verbatim by the Mapping → Lights tab (the builder for this display), so the
@@ -367,7 +367,7 @@ class PadSpanLightsApp extends HTMLElement {
   // The api the shared use surface and sheets act through — the sidebar's
   // toggle (optimistic + shake), its control card, its aggregate action.
   _useApi(lightsByEid, lights){
-    const controlsFor=(l0)=>!!(l0 && (isWledLight(l0)||isPartitionLight(l0)||l0.dimmable||l0.isFan||l0.isLock));
+    const controlsFor=hasControlCard;
     const api={
       hass:this._hass, lightsByEid, lights, controlsFor,
       toggle:(eid)=>this._toggle(eid),
@@ -577,9 +577,9 @@ class PadSpanLightsApp extends HTMLElement {
       // motion sensor in the list still said "read-only" long after tapping
       // its marker on the map started opening the calendar.
       onRowClick: (l)=> l.isMotion ? openActivityCalendar(this._hass, l.entity_id) : this._toggle(l.entity_id),
-      onRowLongPress: (l)=>{ if(isWledLight(l) || isPartitionLight(l) || l.dimmable || l.isFan || l.isLock) this._openWledDetail(l.entity_id); },
+      onRowLongPress: (l)=>{ if(hasControlCard(l)) this._openWledDetail(l.entity_id); },
       // The "⋯" on every row: the controls in plain sight.
-      onRowMore: (l)=>{ if(isWledLight(l) || isPartitionLight(l) || l.dimmable || l.isFan || l.isLock) this._openWledDetail(l.entity_id); else this._toggle(l.entity_id); },
+      onRowMore: (l)=>{ if(hasControlCard(l)) this._openWledDetail(l.entity_id); else this._toggle(l.entity_id); },
       onToggleHidden: (eid)=>{
         if(hidden.has(eid)) hidden.delete(eid);
         else hidden.add(eid);
