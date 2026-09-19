@@ -1015,21 +1015,36 @@ class added, no single source of truth for "what device classes exist and
 what each one means." This is the one item on this list that is actively
 compounding rather than static. See §5, Phase 2a.
 
-**4.2 — Zero CI enforcement on 63,181 lines of JavaScript.** The Python
-side has a real, two-version CI matrix (`pytest.yml`). The JS side —
-which is now the *larger* half of the codebase by line count (63,181 vs.
-37,300) — has 18 `.mjs` smoke-test scripts under `tests/js/` that are not
-wired into any GitHub Actions workflow (`hacs.yml`, `hassfest.yml`,
-`pytest.yml` are the only three), and there is no linter (ESLint or
-equivalent) enforced anywhere. `CONTRIBUTING.md` asks for `black`/`isort`
-on Python but has no equivalent JS requirement, and even the Python
-lint (`ruff`, present as a local `.ruff_cache` and in dev habit) isn't a
-CI gate either — only `pytest -q` is. This is the DORA report's exact
-warning in concrete form: the throughput side of the ledger (releases/day)
-is far ahead of the stability side's own visible proof (a green checkmark
-that only covers the smaller half of the code). It is also the most
-mechanical, cheapest fix on this list — `node tests/js/*.mjs` running in
-CI is a small addition, not a redesign.
+**4.2 — CORRECTED 2026-09-19, before Phase 2b implementation started.**
+The original claim below ("18 `.mjs` scripts... not wired into any
+GitHub Actions workflow") was checked before building on it and found
+**false**: every one of the 19 `.mjs` scripts under `tests/js/` is
+already wrapped by a Python test (`subprocess.run`, asserting on the
+JSON result) and every one of those Python tests already runs inside
+`python -m pytest tests -q`, which `pytest.yml` already runs in CI on
+every push across 2 Python versions. No skip logic hides them; a
+missing/failing `node` invocation fails the Python test hard. The
+research pass that wrote this finding didn't check whether the scripts
+were invoked from elsewhere before concluding they were orphaned — left
+here struck through, not deleted, per this project's own rule to say
+what actually happened rather than silently fix it.
+
+**The real, narrower gap**, found while verifying the above: `tests/js/render_smoke.mjs`
+walks the entire `views/` directory (44 files) and invokes every
+export — self-maintaining coverage, new views are covered automatically.
+The 4 top-level frontend files (`panel.js`, `lights_panel.js`,
+`help_content.js`, `sample_data.js`) don't get that same treatment —
+only one narrow method of `panel.js` is covered
+(`whats_new_card.mjs`, one specific card). There's real precedent for
+this costing something: `whats_new_card.mjs`'s own header documents a
+real shipped bug (2026-08-25) where a rare-state method in `panel.js`
+referenced an undeclared variable, passed `node --check`, passed the
+full test suite, and silently blanked the Overview tab for every
+install until one hit that rare state. `lights_panel.js` and
+`help_content.js` have no equivalent net under them today. Separately,
+there is genuinely no JS linter (ESLint or equivalent) anywhere, and
+even the Python lint (`ruff`) isn't CI-enforced, only `pytest -q` is —
+that part of the original claim holds.
 
 **4.3 — Two "god files."** `maps.js` at 11,075 lines and `iso_lights.js`
 at 6,116 lines each now exceed the size where a single read (by Garry or
@@ -1139,14 +1154,15 @@ This is the single highest-leverage item in this report: it directly
 retires the counted cost from today's session and prevents it from
 recurring for every device class after this one.
 
-**Phase 2b — Wire JS into CI (addresses 4.2).** Run the existing
-`tests/js/*.mjs` smoke scripts in a GitHub Actions job alongside
-`pytest.yml`. Add a minimal lint step (ESLint with a light config, or
-even just `node --check` across the panel — noting `09_HARD_WON_RULES.md`
-already documents that `node --check` doesn't catch runtime errors, so
-pair it with actually invoking `render()` per file in the smoke harness
-the docs mention is planned). Small, mechanical, and closes the biggest
-asymmetry between the two halves of the codebase.
+**Phase 2b — REVISED 2026-09-19 (original scope was based on the
+incorrect 4.2 claim above).** Not "wire JS into CI" — it already is.
+Revised to the real gap: extend `render_smoke.mjs`-style
+import-and-invoke coverage to the 3 top-level frontend files that don't
+have it (`lights_panel.js`, `help_content.js`, `sample_data.js`;
+`panel.js` has partial coverage via `whats_new_card.mjs`), following the
+exact pattern that already caught a real shipped bug in `panel.js`. Add
+a JS linter (ESLint, light config) as a separate, smaller item — genuinely
+missing, unlike the smoke-test claim.
 
 **Phase 2c — Split `maps.js` and `iso_lights.js` (addresses 4.3).**
 Do this *after* 2a, using the seams the registry work exposes (rendering,
