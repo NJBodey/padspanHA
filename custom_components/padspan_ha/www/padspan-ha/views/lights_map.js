@@ -1841,6 +1841,7 @@ export function buildLightsMapCard(hostIn){
         // click handler and _wireDoorCircle's drag handlers): drawn with a
         // live wall-gap preview so positioning it is visible feedback, not
         // a guess.
+        barrierHit: !!host.barrierHit,
         doorCircleArmedEid: host.doorCircleArmedEid || null,
         doorCircleM: host.doorCircleM || null,
         // Working, proven beacons (Garry, 2026-09-09) — read-only, host
@@ -2925,12 +2926,25 @@ export function buildLightsTable(host, lights){
   // Map → index: selecting a marker brings its row into view (the builder
   // sets focusRowEid for the render right after a map selection, only).
   if (host.focusRowEid) {
-    requestAnimationFrame(() => {
-      const r = tbody.querySelectorAll("tr").find
-        ? tbody.querySelectorAll("tr").find(t => t.getAttribute("data-eid") === host.focusRowEid)
-        : [...tbody.querySelectorAll("tr")].find(t => t.getAttribute("data-eid") === host.focusRowEid);
-      if (r && r.scrollIntoView) r.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
+    const want = host.focusRowEid;
+    // Two frames, not one: this table is built while its card is still
+    // DETACHED (the host appends it after this returns, then the panel
+    // swaps the whole view in), so the first frame is the swap itself and
+    // only the second has real layout to measure against.
+    const jump = () => {
+      const r = [...tbody.querySelectorAll("tr")].find(t => t.getAttribute("data-eid") === want);
+      if (!r || !r.scrollIntoView) return;
+      // CENTRE, not "nearest" (Garry, 2026-09-19: the hold "is missing the
+      // right spot"). "nearest" parks the row flush against whichever edge
+      // it came from — under the sticky toolbar/toast when it was above,
+      // on the very bottom edge (behind a phone's browser chrome) when it
+      // was below — and nothing marked WHICH row it was. inline:"nearest"
+      // keeps a table wider than the screen from also jumping sideways.
+      r.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+      r.classList.add("lv-row-flash");
+      setTimeout(() => { try { r.classList.remove("lv-row-flash"); } catch (_) {} }, 2400);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(jump));
   }
   return root;
 }

@@ -2458,6 +2458,13 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
   const HIDECODES = !!opts.hideCodes;
   const CLASSF    = opts.classFilter && opts.classFilter!=="all" ? String(opts.classFilter) : null;
   const HALO      = !!opts.hitHalo;
+  // Builder only: a fat invisible press target laid over each LINKED
+  // door/window/lock section. Those draw with pointer-events:none (an open
+  // door draws nothing at all but two 2.6px dots), so without this there is
+  // literally nothing to press — the one class of device on the map that
+  // could never be held (Garry, 2026-09-19: "press and hold doesn't work
+  // for all devices"). Opt-in so the household surface's markup is unchanged.
+  const BARRIER_HIT = !!opts.barrierHit;
   const COLLAPSE  = !!opts.collapseUnplaced;
   // Automorph (Garry, 2026-09-07): 0 disables it outright — see
   // automorphAuraSvg/automorphRing below, near perimeterSvg.
@@ -5622,6 +5629,13 @@ export function buildIsoSVG(model, byRoom, hiddenEids, focusZ, floorGap, horizGa
           const [dx,dy]=iso(p[0],p[1],z);
           s+=`<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="2.6" fill="#9333ea" `+
             `stroke="#1b0f24" stroke-width="0.8" opacity="${barDim.toFixed(2)}" pointer-events="none"/>`;
+        }
+        if(BARRIER_HIT && dl){
+          const a=bpts[0], b=bpts[bpts.length-1];
+          const [mx,my]=iso((a[0]+b[0])/2,(a[1]+b[1])/2,z);
+          s+=`<polyline class="lbarhit" data-eid="${escSVG(bar.linked_entity_id)}" data-cx="${mx.toFixed(1)}" data-cy="${my.toFixed(1)}" `+
+            `points="${ppx}" fill="none" stroke="#000" stroke-opacity="0" stroke-width="16" stroke-linecap="round" `+
+            `pointer-events="stroke" style="cursor:pointer"/>`;
         }
       }
       // The wall the circle currently straddles, drawn WITH A GAP over the

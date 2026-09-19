@@ -423,6 +423,31 @@ _BARRIER_LBE = {**_LIGHTS_BY_EID, "binary_sensor.frontdoor": {
     "shape": "door", "isDoor": True}}
 
 
+def test_the_builder_can_ask_for_a_press_target_over_a_linked_opening(tmp_path):
+    """Garry, 2026-09-19: "press and hold doesn't work for all devices". A
+    linked door/window/lock is a section of wall drawn pointer-events:none —
+    an OPEN door draws nothing but two 2.6px dots — so there was literally
+    nothing to press. With barrierHit the renderer lays one invisible
+    stroke-hit path over the section, carrying the linked entity's id; an
+    open door (nothing visible) gets one too. Without the opt — the
+    household surface — the markup is exactly what it was."""
+    open_lbe = {**_BARRIER_LBE, "binary_sensor.frontdoor": {**_BARRIER_LBE["binary_sensor.frontdoor"], "state": "on"}}
+    script = (
+        "import * as M from './iso_lights.mjs';\n"
+        f"const MODEL={json.dumps(_BARRIER_MODEL)};\nconst FLOORS={json.dumps(_FLOORS)};\n"
+        f"const LBE={json.dumps(open_lbe)};\n"
+        "const plain=M.buildIsoSVG(MODEL,{},new Set(),null,150,0,LBE,false,FLOORS);\n"
+        "const hit=M.buildIsoSVG(MODEL,{},new Set(),null,150,0,LBE,false,FLOORS,{barrierHit:true});\n"
+        "const m=/<polyline class=\"lbarhit\" data-eid=\"([^\"]+)\"[^>]*pointer-events=\"([a-z]+)\"/.exec(hit);\n"
+        "console.log(JSON.stringify({plainHas: plain.includes('lbarhit'), eid: m&&m[1], pe: m&&m[2],\n"
+        "  count: (hit.match(/class=\"lbarhit\"/g)||[]).length}));\n"
+    )
+    out = _run_js(tmp_path, script)
+    assert out["plainHas"] is False, "the household surface's markup must not change"
+    assert out["count"] == 1 and out["eid"] == "binary_sensor.frontdoor", out
+    assert out["pe"] == "stroke", "the press target must actually receive the pointer"
+
+
 def test_a_linked_closed_barrier_draws_a_solid_line_and_two_purple_dots(tmp_path):
     out = _run_js(tmp_path, _barrier_harness(_BARRIER_MODEL, _BARRIER_LBE))
     svg = out["svg"]
