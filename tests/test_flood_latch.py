@@ -23,10 +23,23 @@ so no test here can reproduce the crash itself — what CAN be pinned down is
 the actual code shape that caused it: the registered listener must be the
 real function (or a `functools.partial` of it), never a lambda/closure.
 test_setup_registers_a_partial_not_a_lambda below is that guard.
+
+2026-09-19 week-review finding: the read-modify-write into flood_latches
+used to happen synchronously in _on_state_changed itself, with only the
+final write deferred via hass.async_create_task — so two different sensors
+triggering back-to-back (no await between the two calls) read the same
+pre-update snapshot and the later write silently clobbered the earlier
+one's addition. Fixed by moving the whole read-check-write into
+_async_latch, serialized behind a lock, so the snapshot is taken fresh at
+write time. That means _on_state_changed's own tests now need to actually
+run the coroutine it schedules (via hass.async_create_task) to see the
+write happen — _hass() below hands back the scheduled coroutine(s) for a
+test to await, rather than a bare MagicMock that silently drops them.
 """
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import time
 from types import SimpleNamespace
@@ -56,11 +69,19 @@ def _settings(flood_latches=None):
 
 
 def _hass(st):
-    return SimpleNamespace(
+    """.tasks collects every coroutine handed to async_create_task, in
+    order — a test drives one (or, for the race test, interleaves several)
+    by awaiting it directly, the same way the real event loop eventually
+    would. async_create_task itself stays a real MagicMock so
+    .assert_called_once() etc. still work."""
+    tasks = []
+    hass = SimpleNamespace(
         data={DOMAIN: {DATA_SETTINGS: st}},
         bus=MagicMock(),
-        async_create_task=MagicMock(),
+        async_create_task=MagicMock(side_effect=lambda coro, *a, **k: tasks.append(coro)),
+        tasks=tasks,
     )
+    return hass
 
 
 def _state_event(entity_id, state, device_class="moisture"):
@@ -129,11 +150,12 @@ def test_is_active_true_before_expiry_false_after() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_a_fresh_trigger_latches_and_persists() -> None:
+async def test_a_fresh_trigger_latches_and_persists() -> None:
     st = _settings()
     hass = _hass(st)
     _on_state_changed(hass, _state_event("binary_sensor.kitchen_leak", "on"))
     hass.async_create_task.assert_called_once()
+    await hass.tasks[0]
     st.async_set.assert_called_once()
     latches = st.async_set.call_args.kwargs["flood_latches"]
     rec = latches["binary_sensor.kitchen_leak"]
@@ -161,25 +183,83 @@ def test_ignores_non_moisture_device_class() -> None:
     st.async_set.assert_not_called()
 
 
-def test_retrigger_while_already_latched_keeps_original_time() -> None:
+async def test_retrigger_while_already_latched_keeps_original_time() -> None:
     """ISA-18.2: a still-active alarm keeps its ORIGINAL occurrence time —
-    a chattering sensor must not push expiry out further on every flap."""
+    a chattering sensor must not push expiry out further on every flap.
+    The no-op decision now lives inside the scheduled task (it has to, to
+    read fresh state under the lock — see the module docstring), so a task
+    IS still scheduled here; it just must not end up writing anything."""
     now = time.time()
     original = {"triggered_at": now - 10, "expires_at": now - 10 + ACTIVE_WINDOW_S}
     st = _settings({"binary_sensor.kitchen_leak": original})
     hass = _hass(st)
     _on_state_changed(hass, _state_event("binary_sensor.kitchen_leak", "on"))
+    await hass.tasks[0]
     st.async_set.assert_not_called()
 
 
-def test_retrigger_after_expiry_starts_a_fresh_latch() -> None:
+async def test_retrigger_after_expiry_starts_a_fresh_latch() -> None:
     expired = {"triggered_at": 0.0, "expires_at": 1.0}
     st = _settings({"binary_sensor.kitchen_leak": expired})
     hass = _hass(st)
     _on_state_changed(hass, _state_event("binary_sensor.kitchen_leak", "on"))
+    await hass.tasks[0]
     st.async_set.assert_called_once()
     latches = st.async_set.call_args.kwargs["flood_latches"]
     assert latches["binary_sensor.kitchen_leak"] != expired
+
+
+# ---------------------------------------------------------------------------
+# Tests: the lost-update race (2026-09-19 week-review finding)
+# ---------------------------------------------------------------------------
+
+
+async def test_two_different_sensors_triggering_back_to_back_do_not_clobber_each_other() -> None:
+    """The actual regression: two _on_state_changed calls for DIFFERENT
+    entities, back-to-back with no await between them (exactly what HA
+    does dispatching two listeners off the same event-bus tick), used to
+    each read the same pre-update flood_latches snapshot and independently
+    build a new dict from it — whichever write landed last silently won,
+    with the other entity's brand-new latch vanishing. fake_async_set below
+    mutates st.data (like the real store) and yields once mid-write
+    (await asyncio.sleep(0)), the same way a real store.async_save's disk
+    write would give the loop a chance to run the other pending task —
+    the exact window the original bug fell into."""
+    st = _settings()
+
+    async def fake_async_set(**kwargs):
+        await asyncio.sleep(0)
+        st.data = {**st.data, **kwargs}
+
+    st.async_set = AsyncMock(side_effect=fake_async_set)
+    hass = _hass(st)
+    _on_state_changed(hass, _state_event("binary_sensor.flood_a", "on"))
+    _on_state_changed(hass, _state_event("binary_sensor.flood_b", "on"))
+    assert len(hass.tasks) == 2
+    await asyncio.gather(*hass.tasks)
+    latches = st.data["flood_latches"]
+    assert "binary_sensor.flood_a" in latches, f"the first trigger must survive the second's write: {latches}"
+    assert "binary_sensor.flood_b" in latches, f"the second trigger must survive too: {latches}"
+
+
+async def test_a_reset_racing_a_different_sensors_trigger_does_not_clobber_it() -> None:
+    """async_reset_latch shares _async_latch's lock (same module docstring
+    hazard, a second caller) — a Reset click for one entity racing a fresh
+    trigger for a DIFFERENT entity must not drop either change."""
+    st = _settings({"binary_sensor.flood_old": {"triggered_at": 1.0, "expires_at": 2.0}})
+
+    async def fake_async_set(**kwargs):
+        await asyncio.sleep(0)
+        st.data = {**st.data, **kwargs}
+
+    st.async_set = AsyncMock(side_effect=fake_async_set)
+    hass = _hass(st)
+    _on_state_changed(hass, _state_event("binary_sensor.flood_new", "on"))
+    assert len(hass.tasks) == 1
+    await asyncio.gather(hass.tasks[0], async_reset_latch(hass, "binary_sensor.flood_old"))
+    latches = st.data["flood_latches"]
+    assert "binary_sensor.flood_new" in latches, f"the concurrent trigger must survive the reset: {latches}"
+    assert "binary_sensor.flood_old" not in latches, f"the reset must still take effect: {latches}"
 
 
 # ---------------------------------------------------------------------------
