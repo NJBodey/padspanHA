@@ -224,7 +224,7 @@ _ADMISSION_CASES = [
     ("binary_sensor.battery", {"device_class": "battery"}, False),
     ("binary_sensor.plain", {}, False),
     ("sensor.temp", {"device_class": "temperature"}, True),
-    ("sensor.notype", {}, True),  # isTempSensor's historical null-device_class catch-all
+    ("sensor.notype", {}, False),  # no device_class at all must never fall back to "temperature"
     ("sensor.rh", {"device_class": "humidity"}, True),
     ("sensor.co2", {"device_class": "carbon_dioxide"}, True),
     ("sensor.aq_word", {"device_class": "enum", "friendly_name": "Bath Outlet Air Quality"}, True),

@@ -96,9 +96,13 @@ export function isFloodSensor(l) {
 export function isTempSensor(l) {
   // By device_class, not the bare domain, since 2026-09-14: air-quality
   // sensors are sensor.* too (below), so "any sensor.* is a thermometer"
-  // stopped being true the moment a second sensor class was admitted.
-  return String(l.entity_id || "").startsWith("sensor.")
-    && (l.device_class === "temperature" || l.device_class == null);
+  // stopped being true the moment a second sensor class was admitted — a
+  // device_class-less null fallback survived that change by mistake and,
+  // once isAtlasEntity (2026-09-19) started reusing this SAME test as the
+  // live admission gate, silently swept every device-class-less sensor.*
+  // in a real install (template/diagnostic/uptime sensors, common) onto
+  // the map as a fake, permanently-blank thermometer. Strict, no fallback.
+  return String(l.entity_id || "").startsWith("sensor.") && l.device_class === "temperature";
 }
 
 // A sensor.* entity reporting device_class "humidity" — Garry, 2026-09-15:
