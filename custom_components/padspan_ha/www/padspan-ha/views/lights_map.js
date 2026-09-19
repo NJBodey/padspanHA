@@ -223,28 +223,37 @@ export function airQualityLabel(l){
 // What a room sheet says: lights and fans counted SEPARATELY (so "all off"
 // is never ambiguous about the fan), motion summarised. The eids handed back
 // are what the aggregate actions act on.
-export function roomAggregate(lights, roomName, floodLatches){
-  const here = (lights || []).filter(l => l.area_name === roomName);
+// The counting pass roomAggregate and floorAggregate both need — they used
+// to independently hand-filter by flag (l.isFan, l.isMotion, l.isAir,
+// l.isFlood) with different code computing the same five numbers two ways
+// (found in the Phase 2a registry audit, 2026-09-19; the direct root cause
+// of the openFloorSheet item-list bug fixed the same day — floorAggregate's
+// OWN copy never grew door/temp/humidity/lock at all). One pass, one
+// source of the field names every consumer (openRoomSheet, openFloorSheet)
+// already reads.
+function _aggregateCounts(here, floodLatches){
   const lightsHere = here.filter(l => lightClassOf(l) === "light" || lightClassOf(l) === "strip");
   const fansHere = here.filter(l => l.isFan);
   const motionHere = here.filter(l => l.isMotion);
   const airHere = here.filter(l => l.isAir);
   const floodHere = here.filter(l => l.isFlood);
   return {
-    room: roomName,
     lightsOn: lightsHere.filter(l => l.state === "on").length, lightsTotal: lightsHere.length,
     fansOn: fansHere.filter(l => l.state === "on").length, fansTotal: fansHere.length,
     motionActive: motionHere.filter(l => l.state === "on").length, motionTotal: motionHere.length,
-    // Air quality: the worst reading in the room (NaN = none reporting).
+    // Air quality: the worst reading (NaN = none reporting).
     airTotal: airHere.length, airWorst: airWorstOf(airHere),
     // Flood: binary, not a badness scale — how many are actively alarming
     // right now, live OR latched (flood_latch.py) — a sensor that dried out
     // but is still within its 2-day window must keep counting here, the
-    // same reasoning as the ALARM label in openAggregateSheet/buildLightsTable.
+    // same reasoning as the ALARM label stateWordOf gives it.
     floodTotal: floodHere.length, floodActive: floodHere.filter(l => floodIsAlarming(l, floodLatches)).length,
     lightEids: lightsHere.map(l => l.entity_id), fanEids: fansHere.map(l => l.entity_id),
-    all: here,
   };
+}
+export function roomAggregate(lights, roomName, floodLatches){
+  const here = (lights || []).filter(l => l.area_name === roomName);
+  return { room: roomName, ..._aggregateCounts(here, floodLatches), all: here };
 }
 // Mirrors const.OUTDOOR_FLOOR_NAMES / presence_rules.is_outdoor_floor: the
 // fabric's "__outside__" sentinel, the registry's "outside", and the plain
@@ -278,18 +287,7 @@ export function lightFloorId(l, model){
 }
 export function floorAggregate(lights, model, floorId, floodLatches){
   const here = (lights || []).filter(l => lightFloorId(l, model) === String(floorId));
-  const lightsHere = here.filter(l => lightClassOf(l) === "light" || lightClassOf(l) === "strip");
-  const fansHere = here.filter(l => l.isFan);
-  return {
-    floorId: String(floorId),
-    lightsOn: lightsHere.filter(l => l.state === "on").length, lightsTotal: lightsHere.length,
-    fansOn: fansHere.filter(l => l.state === "on").length, fansTotal: fansHere.length,
-    motionActive: here.filter(l => l.isMotion && l.state === "on").length,
-    airTotal: here.filter(l => l.isAir).length, airWorst: airWorstOf(here.filter(l => l.isAir)),
-    floodTotal: here.filter(l => l.isFlood).length,
-    floodActive: here.filter(l => l.isFlood && floodIsAlarming(l, floodLatches)).length,
-    lightEids: lightsHere.map(l => l.entity_id), fanEids: fansHere.map(l => l.entity_id),
-  };
+  return { floorId: String(floorId), ..._aggregateCounts(here, floodLatches) };
 }
 // The worst air-quality badness among these sensors, NaN when none reports.
 export function airWorstOf(airLights){
