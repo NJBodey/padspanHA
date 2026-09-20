@@ -31,7 +31,14 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_SETTINGS: dict[str, Any] = {
     "data_mode": "sample",  # "sample" | "live"
     "cpu_mode": "shared",  # "shared" | "single" | "dedicated" — see PresenceCoordinator
-    "update_check_enabled": True,  # daily version ping to padspan.traks.ca (see README)
+    # Master kill switch for every outbound call PadSpan can make: the daily
+    # update check, PadSpan Pro licence activation/revalidation, the two
+    # vendor-lookup APIs, and the opt-in telemetry send. ON by default, so a
+    # fresh install makes zero outbound requests until a person finds this
+    # switch (Settings -> Presence -> Local-Only Mode) and turns it off —
+    # the per-feature toggles below only matter once this one is off.
+    "local_only_mode": True,
+    "update_check_enabled": True,  # daily version ping to padspan.traks.ca (see README) — blocked while local_only_mode is on
     # Opt-in usage report (telemetry.py). OFF until a person turns it on;
     # the id is minted on first enable and can be replaced from Settings.
     "telemetry_enabled": False,
@@ -41,7 +48,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "whatsnew_seen_version": "",
     "telemetry_install_id": "",
     "telemetry_last_day": "",       # UTC day of the last accepted report (one per day)
-    "vendor_lookup_enabled": True,  # Sends MAC prefixes to vendor lookup APIs when requested from UI
+    "vendor_lookup_enabled": True,  # Sends MAC addresses to vendor lookup APIs when requested from UI — blocked while local_only_mode is on
     "ref_power":      -59.0,   # dBm RSSI at 1 m (distance formula)
     "path_loss_exp":   2.5,    # path-loss exponent n (distance formula)
     "hidden_map_ids":  [],     # map IDs hidden from 3D stack view
@@ -267,3 +274,18 @@ class SettingsStore:
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.data.get(key, default)
+
+
+def local_only_enabled(hass: HomeAssistant) -> bool:
+    """True unless a person has explicitly turned local-only mode off.
+
+    Every call site that would otherwise reach padspan.traks.ca, traks.ca,
+    macvendors.com or maclookup.app checks this FIRST, ahead of its own
+    per-feature toggle — so flipping this one switch back on (the default)
+    is always enough to guarantee zero outbound requests, regardless of
+    what update_check_enabled / vendor_lookup_enabled / telemetry_enabled /
+    a stored licence key say.
+    """
+    from .const import DATA_SETTINGS, DOMAIN  # noqa: PLC0415
+    st = hass.data.get(DOMAIN, {}).get(DATA_SETTINGS)
+    return bool((st.data if st else DEFAULT_SETTINGS).get("local_only_mode", True))

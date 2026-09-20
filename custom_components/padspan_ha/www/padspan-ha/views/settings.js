@@ -954,6 +954,36 @@ function _settingsPresence(ctx, el){
     ),
   ]));
 
+  // ── Local-Only Mode ──────────────────────────────────────────────────────────
+  // The one switch that guarantees no outbound request, regardless of what the
+  // update check / vendor lookup / telemetry / licence toggles below say — each
+  // of those checks this one FIRST. On by default.
+  const localOnlyOn = settings.local_only_mode !== false;
+  const localOnlyBtn = el("button", { class: "btn inline", style: localOnlyOn
+    ? "background:#0a2a1a;border-color:#52b788;color:#52b788;font-weight:700"
+    : "background:#2a0a0a;border-color:#e07856;color:#e07856;font-weight:700" },
+    localOnlyOn ? "On — no outbound requests" : "Off — outbound calls allowed");
+  localOnlyBtn.addEventListener("click", async () => {
+    try {
+      await ctx.actions.settingsSet({ local_only_mode: !localOnlyOn });
+      ctx.toast(!localOnlyOn ? "Local-Only Mode on — update check, vendor lookup, telemetry and licence calls are all blocked" : "Local-Only Mode off");
+      ctx.actions.renderRooms();
+    } catch(e) { ctx.toast("Failed to save setting", true); }
+  });
+  wrap.appendChild(el("div", { class: "card" }, [
+    el("div", { class: "h2" }, "Local-Only Mode"),
+    el("div", { class: "muted", style: "font-size:12px;margin-bottom:14px" },
+      "The master switch for every outbound request PadSpan can make: the daily update check, " +
+      "PadSpan Pro licence activation/revalidation, the MAC-address vendor lookup (Overview → " +
+      "Objects → Identify), and the opt-in usage report. On (default): none of those run, no " +
+      "matter what their own settings say. Off: each feature below goes back to obeying its own toggle."
+    ),
+    el("div", { style: rowStyle }, [
+      el("div", { style: "font-size:13px;color:#a7f3d0;min-width:130px" }, "Local-only mode"),
+      localOnlyBtn,
+    ]),
+  ]));
+
   // ── Update Check ───────────────────────────────────────────────────────────
   const updChkOn = settings.update_check_enabled !== false;
   const updChkBtn = el("button", { class: "btn inline", style: updChkOn
@@ -977,6 +1007,33 @@ function _settingsPresence(ctx, el){
     el("div", { style: rowStyle }, [
       el("div", { style: "font-size:13px;color:#a7f3d0;min-width:130px" }, "Update check"),
       updChkBtn,
+    ]),
+  ]));
+
+  // ── Vendor Lookup ────────────────────────────────────────────────────────────
+  const vendLookupOn = settings.vendor_lookup_enabled !== false;
+  const vendLookupBtn = el("button", { class: "btn inline", style: vendLookupOn
+    ? "background:#0a2a1a;border-color:#52b788;color:#52b788;font-weight:700"
+    : "color:#94a3b8" }, vendLookupOn ? "Enabled" : "Disabled");
+  vendLookupBtn.addEventListener("click", async () => {
+    try {
+      await ctx.actions.settingsSet({ vendor_lookup_enabled: !vendLookupOn });
+      ctx.toast(`Vendor lookup ${!vendLookupOn ? "enabled" : "disabled"}`);
+      ctx.actions.renderRooms();
+    } catch(e) { ctx.toast("Failed to save setting", true); }
+  });
+  wrap.appendChild(el("div", { class: "card" }, [
+    el("div", { class: "h2" }, "Vendor Lookup"),
+    el("div", { class: "muted", style: "font-size:12px;margin-bottom:14px" },
+      "When you open Overview → Objects, PadSpan looks up the manufacturer of each visible " +
+      "unidentified BLE device's MAC address against two third-party services (macvendors.com and " +
+      "maclookup.app) so the list can show a vendor name. This sends that MAC address to those " +
+      "services. Results are cached by address prefix. Turn it off here if you don't want BLE MAC " +
+      "addresses seen near your home leaving your network."
+    ),
+    el("div", { style: rowStyle }, [
+      el("div", { style: "font-size:13px;color:#a7f3d0;min-width:130px" }, "Vendor lookup"),
+      vendLookupBtn,
     ]),
   ]));
 

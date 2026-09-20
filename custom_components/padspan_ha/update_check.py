@@ -45,7 +45,8 @@ def _enabled(hass: HomeAssistant) -> bool:
 
 
 async def _check(hass: HomeAssistant) -> None:
-    if not _enabled(hass):
+    from .settings_store import local_only_enabled  # noqa: PLC0415
+    if local_only_enabled(hass) or not _enabled(hass):
         return
     try:
         from homeassistant.helpers.aiohttp_client import async_get_clientsession  # noqa: PLC0415
@@ -101,6 +102,9 @@ async def _revalidate_license(hass: HomeAssistant) -> None:
     keeps working: expiry is enforced locally against the last known date,
     with the grace window in websocket._pro_expiry_state absorbing the gap.
     """
+    from .settings_store import local_only_enabled  # noqa: PLC0415
+    if local_only_enabled(hass):
+        return
     st = hass.data.get(DOMAIN, {}).get(DATA_SETTINGS)
     if not st:
         return

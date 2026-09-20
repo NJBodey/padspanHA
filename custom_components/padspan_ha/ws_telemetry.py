@@ -88,6 +88,10 @@ async def ws_install_base(hass: HomeAssistant, connection, msg) -> None:
     houses. Cached five minutes so an open dashboard costs one fetch.
     """
     from .licence import hass_tier_at_least  # noqa: PLC0415
+    from .settings_store import local_only_enabled  # noqa: PLC0415
+    if local_only_enabled(hass):
+        connection.send_error(msg["id"], "local_only", "Local-Only Mode is on (Settings -> Presence)")
+        return
     if not hass_tier_at_least(hass, "pro"):
         connection.send_error(msg["id"], "tier", "Install-base stats need PadSpan Pro")
         return

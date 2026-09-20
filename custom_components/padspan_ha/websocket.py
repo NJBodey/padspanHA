@@ -557,6 +557,7 @@ async def ws_vendor_lookup(hass: HomeAssistant, connection, msg) -> None:
 
     Used by the Overview → Objects/Unidentified modal.
     """
+    from .settings_store import local_only_enabled  # noqa: PLC0415
     st = hass.data.get(DOMAIN, {}).get(DATA_SETTINGS)
     enabled = True
     try:
@@ -565,7 +566,7 @@ async def ws_vendor_lookup(hass: HomeAssistant, connection, msg) -> None:
     except Exception:
         enabled = True
 
-    if not enabled:
+    if local_only_enabled(hass) or not enabled:
         connection.send_result(msg["id"], {"enabled": False})
         return
 

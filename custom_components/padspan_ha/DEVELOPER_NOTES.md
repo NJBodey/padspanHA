@@ -47,6 +47,8 @@ Cache:
 
 Settings:
 - `vendor_lookup_enabled` is stored in `settings_store.py` (default: True).
+- Also blocked while `local_only_mode` is on (default: True) — see `settings_store.local_only_enabled()`,
+  the shared kill switch every outbound call site (update check, licence, vendor lookup, telemetry) checks first.
 
 ## Where to debug
 

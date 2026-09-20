@@ -824,6 +824,9 @@ async def send_now(hass: HomeAssistant, *, force: bool = False) -> dict[str, Any
     passed the gate and the POST was accepted, so a refused or failed send
     keeps the day's counts for the next attempt.
     """
+    from .settings_store import local_only_enabled  # noqa: PLC0415
+    if local_only_enabled(hass):
+        return {"sent": False, "reason": "local_only", "bytes": 0}
     if not enabled(hass):
         return {"sent": False, "reason": "disabled", "bytes": 0}
     st = hass.data.get(DOMAIN, {}).get(DATA_SETTINGS)

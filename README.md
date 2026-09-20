@@ -280,9 +280,15 @@ The result: a solo project that ships features at a pace that would normally req
 
 ## Updates & Privacy
 
+**Local-Only Mode** (**Settings → Presence → Local-Only Mode**) is the master switch for everything below: **on by default**, so a fresh install makes zero outbound requests until this is turned off. While it's on, the update check, licence activation/revalidation and vendor lookup are all hard-disabled regardless of their own settings.
+
 Once a day, PadSpan asks `padspan.traks.ca` whether a newer version is available and shows a Home Assistant notification when one is. The request contains **only your installed version number** (e.g. `?v=0.21.10`). Like any web request, the server sees your IP address; nothing else is sent, no identifiers are stored on your system, and no usage data is collected. The aggregate ping count is the only signal the project gets about how many installs exist.
 
-To turn it off: **Settings → Presence → Update Check → Disabled**. PadSpan then makes no outbound requests at all.
+To turn it off independently: **Settings → Presence → Update Check → Disabled**.
+
+### Vendor lookup
+
+When you open **Overview → Objects**, PadSpan looks up the manufacturer of each visible unidentified BLE device against two third-party services — `macvendors.com` and `maclookup.app` — so the list can show a vendor name. This sends that device's **MAC address** to both services (results are then cached locally by address prefix, so repeat lookups of the same vendor don't repeat the request). It runs automatically for visible rows when the Objects list opens, not only when you click something. **On by default**; turn it off at **Settings → Presence → Vendor Lookup → Disabled**, or leave Local-Only Mode on.
 
 ### Help improve PadSpan (opt-in usage report)
 

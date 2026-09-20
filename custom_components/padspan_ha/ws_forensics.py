@@ -184,6 +184,12 @@ async def ws_forensics_license_activate(hass: HomeAssistant, connection, msg) ->
     if not key:
         connection.send_error(msg["id"], "invalid_key", "Licence key is required")
         return
+    from .settings_store import local_only_enabled  # noqa: PLC0415
+    if local_only_enabled(hass):
+        connection.send_error(msg["id"], "local_only",
+            "Local-Only Mode is on (Settings -> Presence), so PadSpan cannot reach the licence "
+            "server. Turn it off there first if you want to activate a licence.")
+        return
     st = hass.data.get(DOMAIN, {}).get(DATA_SETTINGS)
     if not st:
         connection.send_error(msg["id"], "not_ready", "Settings store not available")
@@ -256,6 +262,12 @@ async def ws_trial_start(hass: HomeAssistant, connection, msg) -> None:
     email = str(msg.get("email") or "").strip()
     if "@" not in email:
         connection.send_error(msg["id"], "invalid_email", "A real email address is required")
+        return
+    from .settings_store import local_only_enabled  # noqa: PLC0415
+    if local_only_enabled(hass):
+        connection.send_error(msg["id"], "local_only",
+            "Local-Only Mode is on (Settings -> Presence), so PadSpan cannot reach the licence "
+            "server. Turn it off there first if you want to start a trial.")
         return
     st = hass.data.get(DOMAIN, {}).get(DATA_SETTINGS)
     if not st:

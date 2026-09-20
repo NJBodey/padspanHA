@@ -187,6 +187,7 @@ async def ws_settings_get(hass: HomeAssistant, connection, msg) -> None:
         "type": "padspan_ha/settings_set",
         vol.Optional("data_mode"): str,
         vol.Optional("cpu_mode"): str,                        # "shared"|"single"|"dedicated"
+        vol.Optional("local_only_mode"): bool,                # master kill switch for all outbound calls
         vol.Optional("update_check_enabled"): bool,           # daily version ping (README)
         vol.Optional("telemetry_enabled"): bool,              # opt-in usage report (telemetry.py)
         vol.Optional("telemetry_asked"): bool,                # the ask card was answered; never shown again
@@ -319,6 +320,15 @@ async def ws_settings_set(hass: HomeAssistant, connection, msg) -> None:
             if cm not in ("shared", "single", "dedicated"):
                 cm = "shared"
             payload["cpu_mode"] = cm
+        if "local_only_mode" in msg:
+            # Turning OFF the kill switch is an admin's call, same gate as
+            # telemetry_enabled below — it is what makes every other
+            # outbound toggle in this store actually mean something again.
+            _user = getattr(connection, "user", None)
+            if _user is not None and getattr(_user, "is_admin", True) is False:
+                connection.send_error(msg["id"], "unauthorized", "Only an administrator can change Local-Only Mode")
+                return
+            payload["local_only_mode"] = bool(msg.get("local_only_mode"))
         if "update_check_enabled" in msg:
             payload["update_check_enabled"] = bool(msg.get("update_check_enabled"))
         if "telemetry_enabled" in msg:

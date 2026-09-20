@@ -45,6 +45,7 @@ _SIG_RPA = "70:81:94:0D:FB:AA"
 def _hass():
     h = MagicMock()
     settings = SimpleNamespace(data={
+        "local_only_mode": False,  # this fixture models an install that has opted into outbound calls
         "telemetry_enabled": True,
         "telemetry_install_id": "8f0d0f7e-2c8f-4c8a-9d1c-0f2c3d4e5f60",
         "irk_devices": [{"name": "Pixel 8 Pro", "irk_hex": _IRK}],
